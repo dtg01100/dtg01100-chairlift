@@ -100,15 +100,15 @@ There is no current System primary page or `system_page.go` implementation.
 
 ### Architecture route map
 
-The configuration-to-navigation one-to-one assumption is explicitly retired:
-a configuration page is a stable YAML namespace, not a destination identity.
-The [destination and action ownership matrix](destination-matrix.md) records
-all current groups/actions and the five-section target of #241. It retains
-original `(configuration page, group)` references across primary/detail routes,
-including the shared channel and Homebrew inventory cases. That target is not
-a claim that the five-section sidebar has shipped: the current mounts above
-remain until #201's cutover. #342/#343 implement the navigation/composition seam;
-`internal/navigation` remains the sole route authority.
+The configuration-to-navigation one-to-one assumption is retired: a config
+page is a stable YAML namespace, not a destination identity. `internal/navigation`
+owns the seven current primary routes, their detail routes and page-qualified
+group references. The [destination matrix](destination-matrix.md) preserves
+the former five-section proposal as historical analysis, not the navigation
+target: #201 was closed as superseded by the seven-route decision. Livery
+remains the primary for profile picture and supported icon surfaces; its
+`livery_page` groups still gate each builder independently. #342/#343 supplied
+the navigation and composition seam without replacing the primary inventory.
 
 ## Key Patterns
 
@@ -2093,10 +2093,11 @@ page_name:
 ### Key config groups
 
 The [configuration reference](../reference.md) describes the current schema.
-The [destination matrix](destination-matrix.md#configuration-references-and-owners)
-provides the complete 26-group inventory with original namespaces, current
-mounts, proposed destinations and action owners. Derive additions from
-`config.SchemaGroups`; do not infer keys from the sidebar. In particular,
+The [historical destination matrix](destination-matrix.md#configuration-references-and-owners)
+records the original namespace and action audit but its five-route target and
+group count are superseded. Derive current group inventories from
+`config.SchemaGroups` and current routes from `internal/navigation`; do not infer
+policy keys from sidebar titles. In particular,
 `channel_group` and `bootc_status_group` belong to `updates_page`, while
 routine cleanup uses `maintenance_freespace_group`. Legacy System-page input
 is handled by the migration described above, not a current System namespace.

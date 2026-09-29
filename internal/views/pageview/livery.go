@@ -8,24 +8,22 @@ import (
 	"github.com/projectbluefin/chairlift/internal/livery"
 )
 
-// LiveryPageDescription is the page's one-line statement of what the three
-// sections are for.
-//
-// Each group's subtitle names its part of the page-level description.
-const LiveryPageDescription = "Who you stand with, what you roll with, and who you are."
+// LiveryPageDescription introduces the tasks the current page can actually
+// perform. Wallpapers join only when the separately owned group is built.
+const LiveryPageDescription = "Choose a profile picture and customize the icons on your desktop."
 
-// The three surface descriptions.
+// Each section names the surface it changes rather than the old Livery
+// taxonomy. Configuration identities remain the original livery_page groups.
 const (
-	LiveryAppGridFragment = "Who you are"
-	LiveryPanelFragment   = "Who you stand with"
-	LiveryDockFragment    = "What you roll with"
+	LiveryAppGridFragment = "The Show Applications button on GNOME or Kickoff on Plasma"
+	LiveryPanelFragment   = "The top-bar menu on GNOME"
+	LiveryDockFragment    = "Files across your desktop"
 )
 
-// Section titles.
 const (
-	LiveryAppGridTitle = "App Grid Livery"
-	LiveryPanelTitle   = "Foundational Livery"
-	LiveryDockTitle    = "Dock Livery"
+	LiveryAppGridTitle = "App Launcher Icon"
+	LiveryPanelTitle   = "Top Bar Icon"
+	LiveryDockTitle    = "Files Icon"
 )
 
 // LiveryChoice is the combo-row model for a foundation section: the labels in
