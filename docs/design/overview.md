@@ -1438,7 +1438,9 @@ surface in three layers that must stay separate:
   only when the user's `MaintenanceAfterUpdates` preference is set.
 - `internal/updateproviders` holds the production `updateflow.Provider`
   values, which wrap `internal/flatpak`, `internal/homebrew`, `internal/updex`,
-  and `internal/bootc`; the coordinator executes nothing itself.
+  and `internal/bootc`; the coordinator executes nothing itself. Flatpak
+  reconciliation verifies that all applied refs for each executed scope have
+  cleared, ignoring newly appeared updates.
 - `internal/views/updatepresent` maps one snapshot to the shell's title,
   description, banner, and action label, and each source's row subtitle. A
   source whose policy has `Configured` false reads "Disabled by
