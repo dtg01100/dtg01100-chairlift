@@ -1373,6 +1373,20 @@ Two inputs deliberately never cross the pkexec boundary as arguments:
   rejects an absent, non-numeric, or root value), so an authenticated caller
   cannot add an unrelated account to the privileged developer groups.
 
+**Privileged action journal (`internal/journal`):** Every privileged dispatch
+point through `helperexec.Run` unconditionally journals before execution
+(`journal.Record`), recording the action name, input arguments, and would-run
+argv, marked as `suppressed: "dry-run"` in preview mode or `suppressed: "no"`
+for live attempts. After a live command returns, `helperexec.Run` records the
+execution outcome (`journal.RecordOutcome`) with `outcome` in `succeeded`,
+`refused` (PolicyKit authentication dismissed or denied with pkexec exit status
+126 or 127), `failed` (other non-zero exit with exit code), `timed-out`, or
+`cancelled`. Before executing a derived privileged command (such as a concrete
+`bootc switch` target), `cmd/chairlift-helper` prints a machine-readable line
+(`chairlift-helper: exec <argv json>`); `helperexec.Run` parses this line from
+output, strips it from caller-visible stdout/stderr, and includes the concrete
+argv list as `executed` (`[][]string`) in the journal outcome record.
+
 Gaming mode, the third Bluefin-family feature, crosses no privilege boundary
 at all: every component is a user-scope Flatpak installed with
 `flatpak install --user`, the same reasoning that keeps Homebrew tap trust

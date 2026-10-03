@@ -53,6 +53,10 @@ const (
 	CommandDockerDisable = "docker-disable"
 )
 
+// HelperExecPrefix is the machine-readable execution prefix emitted by the
+// privileged helper before executing a derived command.
+const HelperExecPrefix = "chairlift-helper: exec "
+
 // The channel words accepted as channel-switch's second argument. They are
 // the string forms of imageinfo.ChannelStable and imageinfo.ChannelTesting;
 // a compile-time-checked conversion below keeps them from drifting.

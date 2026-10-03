@@ -38,6 +38,7 @@ var codeNameExemptions = map[string]string{
 	"chairlift-printer-":              "unit and container name prefix for rootless printer applications (issue #329); a path/name component, never shown as prose",
 	".chairlift-":                     "temporary configuration filename prefix, never displayed as product prose",
 	"org.frostyard.ChairLift.desktop": "legacy launcher filename from older frostyard installs (issue #443)",
+	"chairlift-helper: exec ":         "machine-readable execution prefix emitted by the privileged helper to communicate derived commands to the GUI",
 }
 
 // exemptStructurally reports whether a literal spelling the code name is a
