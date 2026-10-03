@@ -104,9 +104,9 @@ are listed in [org-adrs.md](org-adrs.md).
   rootless printer-application quadlets: host-networking surface,
   authenticated-admin boundary, family inventory, and verified image state
 
-- [design/destination-matrix.md](design/destination-matrix.md) — current group/action
-  inventory, proposed five-destination ownership, and ADR-reference reconciliation
-  for #241/#344; distinguishes implementation targets from shipped navigation
+- [design/destination-matrix.md](design/destination-matrix.md) — historical
+  five-section proposal from #241/#344, superseded by #201's closure; current
+  routes and groups are in source and [design/overview.md](design/overview.md)
 
 ### Specs
 

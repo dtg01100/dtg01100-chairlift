@@ -1,17 +1,15 @@
 # Destination and action ownership matrix
 
-## Overview
+## Status: superseded proposal
 
-This is the source inventory and relocation contract for
-[#344](https://github.com/projectbluefin/chairlift/issues/344), parcel 3 of
-[#241](https://github.com/projectbluefin/chairlift/issues/241), under
-[#233](https://github.com/projectbluefin/chairlift/issues/233).
-The target organization below is proposed implementation work, **not the current
-sidebar or an accepted ADR**. The current seven primary pages remain usable
-until [#201](https://github.com/projectbluefin/chairlift/issues/201) performs
-the explicit cutover. The [architecture overview](overview.md#pages) describes
-those current mounts. No configuration keys, providers, or privileges change
-with this inventory.
+This file records the original inventory and proposed five-section relocation
+from #241/#344. The maintainer closed #201 as **superseded** on 2026-09-28:
+the application keeps seven primary routes (Updates, Apps, Agents, Features,
+Livery, Maintenance, Help) under `internal/navigation`. The destination map
+and counts below are historical planning evidence, **not** a current or future
+implementation contract. Current group keys and mounts must be read from
+`internal/config`, `internal/navigation`, and the view builders; do not copy
+this table into new issue acceptance or a user-facing walkthrough.
 
 ## Design
 
@@ -192,8 +190,8 @@ run share `UpdateShell.beginMutation`; no separate provider-list state or badge
 counter remains. All external work stays off GTK, with results marshalled back
 before touching controls or starting a new coordinator check.
 
-Livery orders Foundational Livery, Dock Livery, Profile picture, then App Grid
-Livery. Foundations use an embedded, theme-adaptive FlowBox preview grid with
+Livery orders Profile Picture, App Launcher Icon, Top Bar Icon, then Files
+Icon. Foundations use an embedded, theme-adaptive FlowBox preview grid with
 one activation signal. The shared catalog chooser renders at most twelve
 search matches plus Custom SVG; artwork is fetched sequentially through the
 existing livery fetch seams only for those matches. New searches cancel old

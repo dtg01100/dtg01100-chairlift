@@ -90,14 +90,14 @@ never asks for a reboot.
 
 ### 🎨 Livery
 
-- **App Grid Livery**: your own mark on GNOME's Show Applications button or
+- **App Launcher Icon**: your own mark on GNOME's Show Applications button or
   the configured KDE Plasma Kickoff applet — searchable across all
   3,461 brands [Simple Icons](https://simpleicons.org/) publishes, fetched on
   demand
-- **Foundational Livery**: a mark in the top bar — CNCF, Linux Foundation,
+- **Top Bar Icon**: a mark in the top bar — CNCF, Linux Foundation,
   GNOME, freedesktop.org, Apache, Rust, Universal Blue, Bazzite, Aurora, or
   the Open Gaming Collective, which is the default on a gaming image
-- **Dock Livery**: your CNCF project's own colour icon on the Files icon —
+- **Files Icon**: your CNCF project's own colour icon on the Files icon —
   search all 214 projects that publish artwork, from Kubernetes to bootc
 - **Rotate at Login**: the two foundation sections can advance one step each
   time you sign in. Any section also accepts an SVG of your own

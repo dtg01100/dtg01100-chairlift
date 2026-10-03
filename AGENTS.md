@@ -819,6 +819,12 @@ An agent must not break these:
   the service could not be proven stopped. Hardware behaviour — printing
   through a device, USB passthrough, mDNS coexistence — is unverified and
   unwired; say so rather than claim it.
+- **Livery remains one primary with independent task groups.** Profile
+  Picture, App Launcher Icon, supported Top Bar Icon, and Files Icon keep their
+  existing `livery_page` config keys and one built control set. Never add a
+  wallpaper entry until `wallpapers_group` has a working builder (#200); do not
+  clone the icon controls behind a second overview or a new sidebar route.
+
 - **Livery shadows icon-theme names, and the theme it writes into is not
   always hicolor.** GNOME's app-grid button (`view-app-grid-symbolic`), panel
   menu (`PanelIconName(id)`, i.e. `chairlift-livery-<id>-symbolic`, via the

@@ -187,13 +187,11 @@ older message.
 
 ![Livery](screenshots/5-livery.png)
 
-Who you are, who you stand with, and what you roll with.
+Choose your profile picture and the icons shown around your desktop.
 Every foundation, Files/dock, profile-picture, and app-grid choice has a visual
 preview. Search results fetch artwork for at most twelve visible catalog entries;
 searching the rest does not download the whole catalog. Rotation changes the real
 login schedule with its preferences, and a failed save restores confirmed state.
-
-
 
 **Profile Picture** is the picture on your login and lock screens. Pick one of
 Project Bluefin's dinosaurs and Control Center downloads that one illustration
@@ -203,7 +201,7 @@ AccountsService is unavailable the picture is saved to your home folder
 instead and appears after you next sign in, and the confirmation says which of
 the two happened.
 
-**App Grid Livery** is your own mark on the Show Applications button on
+**App Launcher Icon** is your own mark on the Show Applications button on
 GNOME. On KDE Plasma, the same chooser updates each configured Kickoff applet;
 if no Kickoff applet is present, the group reports unavailable instead of
 pretending the setting can be applied. Search all 3,461 brands
@@ -213,7 +211,7 @@ You set it once; it never changes on its own, because a personal mark that
 rotated would stop being personal. Turning the mark off resets the Kickoff applet
 to Plasma's default icon.
 
-On GNOME, **Foundational Livery** puts a foundation's mark in the top bar:
+On GNOME, **Top Bar Icon** puts a foundation's mark in the top bar:
 CNCF, the Linux Foundation, GNOME, freedesktop.org, Apache, Rust, Universal
 Blue, Bazzite, Aurora, or the Open Gaming Collective. This section is omitted
 on Plasma, which has no corresponding top-bar surface. On a gaming image the
@@ -222,7 +220,7 @@ image ships — pick any other and it stays picked.
 Apache uses the foundation's current official oak-leaf mark, shown in monochrome
 like the other symbolic choices.
 
-**Dock Livery** marks the Files icon on GNOME or Dolphin on KDE Plasma with
+**Files Icon** marks the Files application on GNOME or Dolphin on KDE Plasma with
 the project you actually work on. Every CNCF project that publishes artwork
 is in the list — 214 of them, Kubernetes through bootc — so the picker searches
 rather than scrolls, and each one arrives as the project's own colour icon

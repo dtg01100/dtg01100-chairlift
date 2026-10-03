@@ -76,15 +76,15 @@ def _switch(context, row, section):
         f"a switch in the {row!r} row of {section!r}",
     )
 
-@then("the Livery sections put foundations before Dock and App Grid last")
+@then("the Livery sections put App Launcher before Top Bar and Files last")
 def livery_section_order(context):
-    expected = ["Foundational Livery", "Dock Livery", "App Grid Livery"]
+    expected = ["App Launcher Icon", "Top Bar Icon", "Files Icon"]
     def observed():
         names = [atspi.name(node) for node in atspi.descendants(_app(context), only_showing=True)
                  if atspi.role(node) == "grouping" and atspi.name(node) in expected]
         return names if names == expected else None
     if atspi.poll(observed) is None:
-        raise AssertionError("Livery sections do not follow foundation, Dock, App Grid order")
+        raise AssertionError("Livery sections do not follow App Launcher, Top Bar, Files order")
 
 
 
@@ -204,7 +204,7 @@ def step_section_hidden(context, section):
 def step_page_loaded(context):
     """refreshLiveryState has applied: the Files switch, which applyLiveryState
     always makes sensitive, is operable."""
-    ok = atspi.poll(lambda: atspi.sensitive(_switch(context, "Customize the Files Icon", "Dock Livery")))
+    ok = atspi.poll(lambda: atspi.sensitive(_switch(context, "Customize the Files Icon", "Files Icon")))
     assert ok, "the Livery page never finished loading its saved state"
 
 
