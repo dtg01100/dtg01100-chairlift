@@ -15,6 +15,25 @@ type Presentation struct {
 	ShowAction  bool
 	ActionStyle string
 	Banner      string
+	// Announcement is what a screen reader hears when the phase changes.
+	// It is empty for every phase whose Title already says it; only
+	// PhaseRestartRequired, which clears the panel, sets it on its own.
+	Announcement string
+}
+
+// Announce returns the text to announce on a phase change: the explicit
+// Announcement when the panel carries no title, the Title otherwise.
+func (p Presentation) Announce() string {
+	if p.Announcement != "" {
+		return p.Announcement
+	}
+	return p.Title
+}
+
+// ShowStatus keeps active status controls visible but collapses an empty panel.
+// Announcements and banners do not need the status page to occupy space.
+func (p Presentation) ShowStatus(phase updateflow.Phase) bool {
+	return p.Title != "" || p.Description != "" || p.ShowAction || ShowProgress(phase)
 }
 
 // Snapshot maps one coordinator snapshot to aggregate widget text and action
@@ -46,11 +65,14 @@ func Snapshot(state updateflow.Snapshot) Presentation {
 		addAction(&presentation, state.Action, gotext.Get("Retry failed"))
 		return presentation
 	case updateflow.PhaseRestartRequired:
-		presentation := Presentation{Title: gotext.Get("Restart required"),
-			Description: gotext.Get("Restart to finish installing updates."),
-			Banner:      gotext.Get("Restart required")}
-		addAction(&presentation, state.Action, gotext.Get("Restart now"))
-		return presentation
+		// The restart action lives on the Operating system row, not on the
+		// page-level status panel: an in-progress row that says "Deployment
+		// staged" with a "Restart now" suffix tells the user both halves of
+		// the story without a banner above the wordmark. The status page is
+		// left with empty text so the Bluefin logo leads straight into the
+		// "System updates" group, and the announcement repeats the row's
+		// subtitle so a screen reader still reports the pending reboot.
+		return Presentation{Announcement: gotext.Get("Deployment staged")}
 	default:
 		return Presentation{Title: gotext.Get("Checking for updates"),
 			Description: gotext.Get("Preparing to check for updates…")}
@@ -77,7 +99,7 @@ func Source(state updateflow.SourceState) (title, subtitle string) {
 	case state.CheckErr != nil:
 		return title, gotext.Get("Check failed: %s", state.CheckErr.Error())
 	case state.RestartRequired:
-		return title, gotext.Get("Restart required")
+		return title, gotext.Get("Deployment staged")
 	case len(state.Items) > 0:
 		return title, gotext.GetN("%d update available", "%d updates available", len(state.Items), len(state.Items))
 	case state.Completed:
@@ -143,13 +165,14 @@ func CanStartOperation(busy, closed bool) bool {
 	return !busy && !closed
 }
 
-// PrimaryActionEnabled reports whether the primary action button (the restart
-// button when a staged update is waiting) should be sensitive. The action
-// must be shown, the shell must not be busy or closed, and no privileged
-// action may already be in flight: StartRestart disables the button to block a
-// second pkexec prompt, but every Render recomputes this from the shell state,
-// so a snapshot arriving while the restart goroutine runs would re-enable it
-// unless the in-flight window is part of the decision (issue #447).
+// PrimaryActionEnabled reports whether the page-level primary action button
+// (check, update all, or retry failed) should be sensitive. Restarting is not
+// a primary action: it lives on the Operating system row (#439). The action
+// must be shown, the shell must not be busy or closed, and no restart may be
+// in flight: while StartRestart's pkexec prompt is pending, starting another
+// operation from the primary would race the reboot, and every Render
+// recomputes sensitivity from shell state, so the in-flight window has to be
+// part of the decision (issue #447).
 func PrimaryActionEnabled(showAction, busy, closed, restartInFlight bool) bool {
 	return showAction && CanStartOperation(busy, closed) && !restartInFlight
 }
@@ -262,12 +285,6 @@ func addAction(presentation *Presentation, action updateflow.Action, checkLabel 
 		presentation.ActionLabel = gotext.Get("Retry failed")
 		presentation.ShowAction = true
 		presentation.ActionStyle = "suggested-action"
-	case updateflow.ActionRestart:
-		presentation.ActionLabel = gotext.Get("Restart now")
-		presentation.ShowAction = true
-		// Destructive rather than suggested: this ends the user's session
-		// and closes whatever they have open.
-		presentation.ActionStyle = "destructive-action"
 	}
 }
 

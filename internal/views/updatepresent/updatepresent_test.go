@@ -161,9 +161,12 @@ func TestSnapshotMapsAggregateStates(t *testing.T) {
 					},
 				},
 			},
-			want: Presentation{Title: "Restart required",
-				Description: "Restart to finish installing updates.",
-				Banner:      "Restart required"},
+			// The restart state lives on the Operating system row, not on
+			// the page-level status panel; the panel clears so the wordmark
+			// leads straight into the "System updates" group. Only the
+			// announcement survives, so a screen reader still reports the
+			// pending reboot.
+			want: Presentation{Announcement: "Deployment staged"},
 		},
 	}
 
@@ -258,7 +261,7 @@ func TestSourceMapsSourceState(t *testing.T) {
 				RestartRequired: true,
 			},
 			title: "Operating system",
-			sub:   "Restart required",
+			sub:   "Deployment staged",
 		},
 		{
 			name: "check error",
@@ -449,5 +452,80 @@ func TestSourceItemTitleUsesIdentityOnlyWhenNameIsMissing(t *testing.T) {
 	}
 	if got := ItemTitle(updateflow.Item{ID: "org.mozilla.firefox"}); got != "org.mozilla.firefox" {
 		t.Fatalf("nameless app title = %q, want its identity", got)
+	}
+}
+
+// A phase change announces to screen readers, so no phase may map to empty
+// announcement text. PhaseRestartRequired clears the status panel's title,
+// which would otherwise announce "" and leave a pending reboot silent.
+func TestEveryPhaseAnnouncesSomething(t *testing.T) {
+	for _, phase := range []updateflow.Phase{
+		updateflow.PhaseIdle,
+		updateflow.PhaseChecking,
+		updateflow.PhaseReady,
+		updateflow.PhaseCheckFailed,
+		updateflow.PhaseUpdating,
+		updateflow.PhasePartialFailure,
+		updateflow.PhaseRestartRequired,
+	} {
+		if got := Snapshot(updateflow.Snapshot{Phase: phase}).Announce(); got == "" {
+			t.Errorf("Snapshot(%v).Announce() is empty; a phase change would announce nothing", phase)
+		}
+	}
+}
+
+func TestAnnouncePrefersTitleWhenThePanelHasOne(t *testing.T) {
+	if got := (Presentation{Title: "Updates available"}).Announce(); got != "Updates available" {
+		t.Fatalf("Announce() = %q, want the title", got)
+	}
+	if got := (Presentation{Title: "Updates available", Announcement: "Deployment staged"}).Announce(); got != "Deployment staged" {
+		t.Fatalf("Announce() = %q, want the explicit announcement", got)
+	}
+}
+
+func TestStatusPanelKeepsVisibleContent(t *testing.T) {
+	tests := []struct {
+		name         string
+		presentation Presentation
+		phase        updateflow.Phase
+		want         bool
+	}{
+		{name: "empty panel", phase: updateflow.PhaseReady},
+		{name: "announcement only", presentation: Presentation{Announcement: "Deployment staged"}, phase: updateflow.PhaseRestartRequired},
+		{name: "banner outside panel", presentation: Presentation{Banner: "Check failed"}, phase: updateflow.PhaseCheckFailed},
+		{name: "title", presentation: Presentation{Title: "Updates available"}, phase: updateflow.PhaseReady, want: true},
+		{name: "description", presentation: Presentation{Description: "Permission denied"}, phase: updateflow.PhaseCheckFailed, want: true},
+		{name: "action", presentation: Presentation{ShowAction: true}, phase: updateflow.PhaseReady, want: true},
+		{name: "checking progress", phase: updateflow.PhaseChecking, want: true},
+		{name: "installing progress", phase: updateflow.PhaseUpdating, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.presentation.ShowStatus(tt.phase); got != tt.want {
+				t.Fatalf("ShowStatus(%v) = %t, want %t", tt.phase, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStatusPanelReturnsAfterStagedDeployment(t *testing.T) {
+	for _, phase := range []updateflow.Phase{
+		updateflow.PhaseIdle,
+		updateflow.PhaseChecking,
+		updateflow.PhaseReady,
+		updateflow.PhaseCheckFailed,
+		updateflow.PhaseUpdating,
+		updateflow.PhasePartialFailure,
+	} {
+		staged := Snapshot(updateflow.Snapshot{Phase: updateflow.PhaseRestartRequired})
+		if staged.ShowStatus(updateflow.PhaseRestartRequired) {
+			t.Fatal("staged deployment leaves an empty status panel visible")
+		}
+		if staged.Announce() != "Deployment staged" {
+			t.Fatal("collapsing the staged panel drops the restart announcement")
+		}
+		if !Snapshot(updateflow.Snapshot{Phase: phase}).ShowStatus(phase) {
+			t.Fatalf("phase %v stays hidden after leaving the staged state", phase)
+		}
 	}
 }

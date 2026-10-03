@@ -251,10 +251,16 @@ An agent must not break these:
   `bootc upgrade` route to `chairlift-helper` would break both the
   staging-ownership invariant below and the fixed-path contract an OS image
   relies on when it installs the helpers. The run's only privileged surface of its own is
-  `restart`: `updateflow.ActionRestart` is set when the snapshot reaches
-  `PhaseRestartRequired`, `updatepresent` renders it as a destructive
-  "Restart now" button, and `UpdateShell.StartRestart` calls `ublue.Restart`.
-  That phase is reached only when a source genuinely reports a restart is
+  `restart`, offered only from the Operating system row once the snapshot
+  reaches `PhaseRestartRequired` (whose page-level action is
+  `updateflow.ActionNone`). The empty status panel is hidden through
+  `updatepresent.Presentation.ShowStatus`, not merely cleared, so its padding
+  does not separate the wordmark from "System updates". Phase announcements
+  come from the shell's visible toast overlay, never the hidden status page.
+  The Operating system row carries a "Deployment staged" subtitle and a
+  "Restart now" suffix that calls `UpdateShell.StartRestart` and in turn
+  `ublue.Restart`. That
+  phase is reached only when a source genuinely reports a restart is
   required — the stage script is idempotent and exits 0 on an already-current
   system, so a successful OS source is not by itself evidence anything
   changed.

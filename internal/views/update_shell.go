@@ -254,8 +254,10 @@ func (s *UpdateShell) beginMutation() bool {
 	}
 	s.operationMu.Lock()
 	defer s.operationMu.Unlock()
+	// A pending restart owns the system until pkexec resolves; refuse any
+	// mutation (Update all, per-row updates) started in that window.
 	if s.coordinator == nil || !updatepresent.CanStartOperation(s.Busy(), s.closed.Load()) ||
-		!s.sourcesReady || updatepresent.ShowProgress(s.snapshot.Phase) || !s.mutation.CompareAndSwap(false, true) {
+		s.restartInFlight.Load() || !s.sourcesReady || updatepresent.ShowProgress(s.snapshot.Phase) || !s.mutation.CompareAndSwap(false, true) {
 		return false
 	}
 	s.primary.SetSensitive(false)
@@ -274,8 +276,18 @@ func (s *UpdateShell) finishMutation() {
 	s.renderPrimaryAction(updatepresent.Snapshot(s.snapshot))
 	s.refresh.SetSensitive(true)
 	s.renderProgress(s.snapshot)
+	// restartInFlight must override the per-row sensitivity flip below:
+	// setSensitive iterates every suffix (including the new Restart now
+	// button added in #439) and would otherwise re-enable a second restart
+	// while the privileged action is still up. Re-applied here so the
+	// row-owned restart path honours the in-flight guard at every snapshot
+	// boundary, not just at the render() call site (#446 review).
+	restartInFlight := s.restartInFlight.Load()
 	for _, row := range s.sourceRows {
 		row.setSensitive(!updatepresent.ShowProgress(s.snapshot.Phase))
+		if restartInFlight {
+			row.setRestartButtonSensitive(false)
+		}
 	}
 }
 
@@ -359,9 +371,8 @@ func (s *UpdateShell) StartRestart() {
 	// Render recomputes the button from shell state, so the flag — not just the
 	// widget call — is what keeps it disabled across snapshots (issue #447).
 	s.restartInFlight.Store(true)
-	if s.primary != nil {
-		s.primary.SetSensitive(false)
-	}
+	s.setRestartButtonSensitive(false)
+	s.renderRestartGatedActions()
 	go func() {
 		ctx, cancel := ublue.DefaultContext()
 		defer cancel()
@@ -371,9 +382,12 @@ func (s *UpdateShell) StartRestart() {
 		if !ublue.StatusCached().Supports(ubluehelper.CommandRestart) {
 			sgtk.RunOnMainThread(func() {
 				s.restartInFlight.Store(false)
-				if s.primary != nil {
-					s.primary.SetSensitive(true)
-				}
+				// Re-run the row render so the restart suffix honours the
+				// current Busy()/ShowProgress gates instead of being
+				// unconditionally re-enabled while a check or mutation
+				// is still in flight (#446 review).
+				s.renderSources(s.snapshot.Sources)
+				s.renderRestartGatedActions()
 				if s.toasts != nil {
 					s.toasts.ShowToast("Restart your computer to finish the update")
 				}
@@ -385,9 +399,12 @@ func (s *UpdateShell) StartRestart() {
 
 		sgtk.RunOnMainThread(func() {
 			s.restartInFlight.Store(false)
-			if s.primary != nil {
-				s.primary.SetSensitive(true)
-			}
+			// Same gating concern as the no-restart-command fallback
+			// above: re-route through renderSources so a failing restart
+			// while a check is running cannot re-enable a second press
+			// before the next snapshot's render() (#446 review).
+			s.renderSources(s.snapshot.Sources)
+			s.renderRestartGatedActions()
 			if s.toasts == nil {
 				return
 			}
@@ -400,6 +417,27 @@ func (s *UpdateShell) StartRestart() {
 			}
 		})
 	}()
+}
+
+// renderRestartGatedActions re-applies the page-level primary action's
+// sensitivity at each restartInFlight transition. renderPrimaryAction is the
+// only consumer of PrimaryActionEnabled's restartInFlight gate, so without
+// this Update all stays pressable while pkexec is pending, or stays disabled
+// after a failed restart until the next snapshot.
+func (s *UpdateShell) renderRestartGatedActions() {
+	if s.closed.Load() {
+		return
+	}
+	s.renderPrimaryAction(updatepresent.Snapshot(s.snapshot))
+}
+
+// setRestartButtonSensitive toggles the Operating system row's restart
+// button, the only control that starts a restart (#439). The page-level
+// primary never offers a restart; it is gated via renderRestartGatedActions.
+func (s *UpdateShell) setRestartButtonSensitive(sensitive bool) {
+	if row, ok := s.sourceRows[updateflow.OperatingSystem]; ok && row != nil {
+		row.setRestartButtonSensitive(sensitive)
+	}
 }
 
 // notifyUpdateComplete sends the single desktop notification ChairLift
@@ -468,6 +506,7 @@ func (s *UpdateShell) Render(snapshot updateflow.Snapshot) {
 	presentation := updatepresent.Snapshot(snapshot)
 	s.statusPage.SetTitle(presentation.Title)
 	s.statusPage.SetDescription(presentation.Description)
+	s.statusPage.SetVisible(presentation.ShowStatus(snapshot.Phase))
 	s.renderPrimaryAction(presentation)
 	s.renderProgress(snapshot)
 	if s.refresh != nil {
@@ -486,7 +525,7 @@ func (s *UpdateShell) Render(snapshot updateflow.Snapshot) {
 		s.toasts.SetUpdateBadge(snapshot.TotalUpdates)
 	}
 	if !s.havePhase || s.lastPhase != snapshot.Phase {
-		s.statusPage.Announce(presentation.Title, gtk.AccessibleAnnouncementPriorityMediumValue)
+		s.toastOverlay.Announce(presentation.Announce(), gtk.AccessibleAnnouncementPriorityMediumValue)
 		s.lastPhase = snapshot.Phase
 		s.havePhase = true
 	}
@@ -526,8 +565,8 @@ func (s *UpdateShell) build() {
 	header.PackEnd(&menuButton.Widget)
 	s.toolbarView.AddTopBar(&header.Widget)
 
-	content := gtk.NewBox(gtk.OrientationVerticalValue, 24)
-	content.SetMarginTop(24)
+	content := gtk.NewBox(gtk.OrientationVerticalValue, 12)
+	content.SetMarginTop(12)
 	content.SetMarginBottom(24)
 	content.SetMarginStart(12)
 	content.SetMarginEnd(12)
@@ -580,13 +619,13 @@ func (s *UpdateShell) build() {
 	s.primary.AddCssClass("pill")
 	s.primary.SetVisible(false)
 	primaryClicked := func(_ gtk.Button) {
+		// The primary never starts a restart: the Operating system row owns
+		// the "Restart now" suffix (#439).
 		switch s.snapshot.Action {
 		case updateflow.ActionCheck:
 			s.StartCheck()
 		case updateflow.ActionUpdateAll, updateflow.ActionRetryFailed:
 			s.StartUpdate()
-		case updateflow.ActionRestart:
-			s.StartRestart()
 		}
 	}
 	s.primary.ConnectClicked(&primaryClicked)
@@ -718,7 +757,7 @@ func (s *UpdateShell) renderSources(states []updateflow.SourceState) {
 	}
 	if !rebuild {
 		for _, state := range states {
-			s.sourceRows[state.ID].render(state, !s.Busy() && !updatepresent.ShowProgress(s.snapshot.Phase))
+			s.sourceRows[state.ID].render(state, !s.Busy() && !updatepresent.ShowProgress(s.snapshot.Phase), s.restartInFlight.Load())
 		}
 		return
 	}
