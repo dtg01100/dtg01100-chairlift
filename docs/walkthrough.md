@@ -149,7 +149,8 @@ A distribution may also configure it to install the Pulp feed reader and stage
 a curated list of developer feeds in your home folder once you switch it on —
 both are off by default, and turning Developer tools back off never removes the
 reader, the file, or anything you imported from it.
-Developer options also offer **WSL Mode** (Ubuntu LTS in Lima), **Enable
+Developer options also offer **WSL Mode** (nsl persistent Linux machines by
+default, with Lima Ubuntu LTS as an alternative), **Enable
 Docker**, and individually selected IDEs and terminal editors, including one
 JetBrains Toolbox entry. WSL needs hardware virtualization and access to
 `/dev/kvm`; permission grants require a new login. Docker needs the base

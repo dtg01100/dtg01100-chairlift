@@ -87,6 +87,7 @@ features_page:
   # back off removes neither, and never touches feeds already imported.
   dx_group:
     enabled: true
+    # wsl_backend: nsl
     # install_pulp: true
     # stage_feeds: true
   gaming_group:

@@ -556,15 +556,17 @@ An agent must not break these:
   Failed observations preserve confirmed state, and previews mutate none of it.
   Do not restore separate counts or a provider-status owner in `UserHome`.
 - **Developer options remain discoverable without privileged support.** WSL
-  Mode uses Lima with an explicit `/dev/kvm` permission floor; the fixed
-  `kvm-enable` action grants access to the invoking account, effective after a
-  new login. Docker uses the fixed enable/disable actions for its system daemon
-  and requires actual socket readiness for this session, not installed CLI
-  tools alone. Missing installed helper actions leave the affected switches
-  insensitive with an explanation rather than hiding the options. IDE and
-  terminal-editor installs are individually selected, including one JetBrains
-  Toolbox entry. Gaming selects typed application/runtime refs, preserves
-  system-scope installations, and keeps partial failures visible.
+  Mode defaults to nsl (persistent Linux machines inside systemd-vmspawn and
+  QEMU/KVM) with Lima (Ubuntu LTS VM) as an alternative backend, both with an
+  explicit `/dev/kvm` permission floor; the fixed `kvm-enable` action grants
+  access to the invoking account, effective after a new login. Docker uses the
+  fixed enable/disable actions for its system daemon and requires actual socket
+  readiness for this session, not installed CLI tools alone. Missing installed
+  helper actions leave the affected switches insensitive with an explanation
+  rather than hiding the options. IDE and terminal-editor installs are
+  individually selected, including one JetBrains Toolbox entry. Gaming selects
+  typed application/runtime refs, preserves system-scope installations, and
+  keeps partial failures visible.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget

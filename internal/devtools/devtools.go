@@ -26,6 +26,13 @@ import (
 	"github.com/projectbluefin/chairlift/internal/ublue"
 )
 
+const (
+	// BackendNSL is the default backend using nsl.
+	BackendNSL = "nsl"
+	// BackendLima is the alternative backend using Lima.
+	BackendLima = "lima"
+)
+
 type Tool struct {
 	Name      string
 	Package   string
@@ -55,6 +62,38 @@ func Tools() []Tool {
 
 func HostSupported() bool {
 	return runtime.GOOS == "linux" && (runtime.GOARCH == "amd64" || runtime.GOARCH == "arm64")
+}
+
+// NSLHostSupported reports whether this host architecture supports nsl.
+// nsl machines run in an x86-64 VM and require an x86-64 Linux host.
+func NSLHostSupported() bool {
+	return runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
+}
+
+// WSLHostSupported reports whether this host architecture can run the selected backend.
+func WSLHostSupported(backend string) bool {
+	if backend == BackendLima {
+		return HostSupported()
+	}
+	return NSLHostSupported()
+}
+
+// NSLInstalled reports whether the nsl binary is found on PATH or Homebrew bin.
+func NSLInstalled() bool {
+	return executable("nsl") != ""
+}
+
+// LimaInstalled reports whether the limactl binary is found on PATH or Homebrew bin.
+func LimaInstalled() bool {
+	return executable("limactl") != ""
+}
+
+// WSLInstalled reports whether the binary for the chosen backend is installed.
+func WSLInstalled(backend string) bool {
+	if backend == BackendLima {
+		return LimaInstalled()
+	}
+	return NSLInstalled()
 }
 
 func (t Tool) Supported() bool {
@@ -144,8 +183,114 @@ type WSLState struct {
 	Ready   bool
 }
 
-func WSLStatus(ctx context.Context) (WSLState, error) {
-	if executable("limactl") == "" {
+// NSLDoctor runs "nsl doctor" to check host prerequisites.
+func NSLDoctor(ctx context.Context) (string, error) {
+	if !NSLInstalled() {
+		return "", errors.New("nsl is not installed")
+	}
+	return command(ctx, false, "nsl", "doctor")
+}
+
+// ParseNSLDoctor parses the output of "nsl doctor". It returns an actionable
+// human-readable message if prerequisites are missing, and reports whether
+// the failure was due to KVM device access or group membership.
+func ParseNSLDoctor(output string) (actionable string, isKVM bool) {
+	var missing []string
+	hasKVM := false
+	for _, rawLine := range strings.Split(output, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "MISSING") {
+			item := strings.TrimSpace(strings.TrimPrefix(line, "MISSING"))
+			lower := strings.ToLower(item)
+			if strings.Contains(lower, "kvm") || strings.Contains(item, "/dev/kvm") {
+				hasKVM = true
+			} else if strings.HasPrefix(item, "UEFI firmware") {
+				missing = append(missing, "UEFI firmware (ovmf)")
+			} else {
+				missing = append(missing, item)
+			}
+		} else if strings.HasPrefix(line, "KVM/vsock group access:") || strings.HasPrefix(line, "SESSION /dev/kvm:") {
+			hasKVM = true
+		} else if strings.HasPrefix(line, "User namespaces:") {
+			missing = append(missing, "user namespaces")
+		} else if strings.HasPrefix(line, "User systemd:") {
+			missing = append(missing, "user systemd")
+		}
+	}
+	if len(missing) > 0 {
+		if len(missing) == 1 {
+			return fmt.Sprintf("Needs host prerequisite: %s (run 'nsl doctor').", missing[0]), hasKVM
+		}
+		return fmt.Sprintf("Needs host prerequisites: %s (run 'nsl doctor').", strings.Join(missing, ", ")), hasKVM
+	}
+	if hasKVM {
+		return "Needs hardware virtualization access. Enabling requests administrator authentication, then a new login before setup can continue.", true
+	}
+	return "", false
+}
+
+// ParseNSLList parses the output of "nsl list" into WSLState.
+func ParseNSLList(output string) WSLState {
+	state := WSLState{}
+	lines := strings.Split(output, "\n")
+	inMachines := false
+	for _, rawLine := range lines {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "No ") || strings.HasPrefix(line, "Pending ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		if fields[0] == "MACHINE" {
+			inMachines = true
+			continue
+		}
+		if fields[0] == "VM" {
+			inMachines = false
+			continue
+		}
+		if inMachines {
+			state.Exists = true
+			if len(fields) >= 2 && fields[1] == "running" {
+				state.Running = true
+			}
+		} else {
+			if len(fields) >= 2 && fields[1] == "running" {
+				state.Running = true
+				state.Exists = true
+			} else if len(fields) >= 2 && fields[1] == "stopped" {
+				state.Exists = true
+			}
+		}
+	}
+	return state
+}
+
+// NSLStatus reads the state of nsl machines and VM.
+func NSLStatus(ctx context.Context) (WSLState, error) {
+	if !NSLInstalled() {
+		return WSLState{}, nil
+	}
+	output, err := command(ctx, false, "nsl", "list")
+	if err != nil {
+		return WSLState{}, err
+	}
+	state := ParseNSLList(output)
+	if state.Running {
+		_, err := command(ctx, false, "nsl", "run", "true")
+		state.Ready = err == nil
+	}
+	return state, nil
+}
+
+// LimaStatus reads the state of Lima instances.
+func LimaStatus(ctx context.Context) (WSLState, error) {
+	if !LimaInstalled() {
 		return WSLState{}, nil
 	}
 	output, err := command(ctx, false, "limactl", "list", "--json")
@@ -176,6 +321,18 @@ func WSLStatus(ctx context.Context) (WSLState, error) {
 	return state, nil
 }
 
+// WSLStatus reads the status for the chosen backend (defaults to nsl).
+func WSLStatus(ctx context.Context, backend ...string) (WSLState, error) {
+	b := BackendNSL
+	if len(backend) > 0 && backend[0] != "" {
+		b = backend[0]
+	}
+	if b == BackendLima {
+		return LimaStatus(ctx)
+	}
+	return NSLStatus(ctx)
+}
+
 // KVMAvailable checks actual invoking-session read/write access, not account
 // membership that only reaches the next login. This is a read-only probe.
 func KVMAvailable() (exists, accessible bool) {
@@ -190,7 +347,97 @@ func KVMAvailable() (exists, accessible bool) {
 	return true, true
 }
 
-func SetWSL(ctx context.Context, enabled bool, progress func(string)) error {
+// SetWSL enables or disables WSL Mode for the specified backend.
+func SetWSL(ctx context.Context, backend string, enabled bool, progress func(string)) error {
+	if backend == BackendLima {
+		return setLima(ctx, enabled, progress)
+	}
+	return setNSL(ctx, enabled, progress)
+}
+
+func setNSL(ctx context.Context, enabled bool, progress func(string)) error {
+	stage := func(text string) {
+		if progress != nil {
+			progress(text)
+		}
+	}
+	if dryrun.Enabled() {
+		if enabled {
+			log.Print("[DRY-RUN] would install nsl, check host prerequisites, start nsl machine, and probe its shell")
+		} else {
+			log.Print("[DRY-RUN] would stop nsl machines and VM without deleting data")
+		}
+		return nil
+	}
+	if enabled {
+		if !NSLHostSupported() {
+			return errors.New("nsl requires a Linux x86_64 host")
+		}
+		exists, accessible := KVMAvailable()
+		if !exists {
+			return errors.New("hardware virtualization is unavailable: /dev/kvm is missing; enable it in firmware")
+		}
+		if !accessible {
+			stage("Requesting hardware virtualization access…")
+			if err := ublue.EnableKVMAccess(ctx); err != nil {
+				return err
+			}
+			return ErrNewLogin
+		}
+		if !NSLInstalled() {
+			stage("Installing nsl through Homebrew…")
+			if err := homebrew.Tap("frostyard/tap"); err != nil {
+				return err
+			}
+			if err := homebrew.TrustPackages(homebrew.UntrustedTap{Name: "frostyard/tap", Casks: []string{"frostyard/tap/nsl"}}); err != nil {
+				return err
+			}
+			if err := homebrew.Install("frostyard/tap/nsl", true); err != nil {
+				return err
+			}
+		}
+		stage("Checking host prerequisites…")
+		output, err := command(ctx, false, "nsl", "doctor")
+		if err != nil {
+			actionable, _ := ParseNSLDoctor(output)
+			if actionable != "" {
+				return errors.New(actionable)
+			}
+			return fmt.Errorf("nsl doctor: %w", err)
+		}
+	}
+	state, err := NSLStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if !enabled {
+		if !state.Exists && !state.Running {
+			return nil
+		}
+		stage("Stopping nsl machines…")
+		_, err := command(ctx, true, "nsl", "shutdown")
+		return err
+	}
+	if !state.Exists {
+		stage("Creating default machine…")
+		if _, err := command(ctx, true, "nsl", "create", "debian", "--distro", "debian:13"); err != nil {
+			return err
+		}
+	}
+	if !state.Running {
+		stage("Starting nsl machine…")
+		if _, err := command(ctx, true, "nsl", "start", "debian"); err != nil {
+			if _, runErr := command(ctx, true, "nsl", "run", "true"); runErr != nil {
+				return err
+			}
+		}
+	}
+	stage("Checking nsl shell…")
+	_, err = command(ctx, false, "nsl", "run", "true")
+	return err
+}
+
+func setLima(ctx context.Context, enabled bool, progress func(string)) error {
 	stage := func(text string) {
 		if progress != nil {
 			progress(text)
@@ -227,7 +474,7 @@ func SetWSL(ctx context.Context, enabled bool, progress func(string)) error {
 			return err
 		}
 	}
-	state, err := WSLStatus(ctx)
+	state, err := LimaStatus(ctx)
 	if err != nil {
 		return err
 	}
