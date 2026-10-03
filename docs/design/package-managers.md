@@ -859,7 +859,14 @@ including its unconditional journal and dry-run handling. The fixed
 `/usr/bin/chairlift-helper` accepts `pin <YYYYMMDD> [--dry-run]` and
 `unpin [--dry-run]`. The day must be eight ASCII digits naming a real date
 no later than today UTC. No image reference crosses pkexec (ADR-0001).
-Recovery's selection UI is separate work in #360.
+Recovery's selection UI (`internal/views/versions.go` and `internal/views/recovery.go`)
+provides confirmed actions: each build row in the Published versions list offers a
+confirmed Pin action that sends only the validated day word, and a host booted on a
+dated tag is offered a confirmed "Return to stream" (unpin) row. Both controls are
+gated on `ublue.StatusCached().Supports(command)` (insensitive with an explanation
+when unsupported), confirm via `AdwAlertDialog` with text from `pageview`, restore
+controls without changing the list on failure or dry-run, and refresh bootc status on
+live success (#360).
 
 `ubluehelper.PinArgs` owns the derivation and resolver seam required by
 [ADR-0017](../adr/0017-pin-through-a-validated-day-word.md). It recovers the

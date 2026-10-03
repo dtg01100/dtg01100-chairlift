@@ -62,6 +62,8 @@ func TestRepeatableControlsReleaseTheirGates(t *testing.T) {
 	for file, gates := range map[string][]string{
 		"updates_page.go": {"driverGate"},
 		"reset.go":        {"powerwashGate", "factoryResetGate"},
+		"versions.go":     {"pinGate"},
+		"recovery.go":     {"unpinGate"},
 		"agents_page.go":  {"agentPresetGate"},
 		// The developer switch and the optional feed setup behind it are
 		// both repeatable: the switch is used again after every toggle, and
