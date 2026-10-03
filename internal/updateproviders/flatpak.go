@@ -87,20 +87,24 @@ func (p *flatpakProvider) Apply(ctx context.Context, items []updateflow.Item, _ 
 	// exit is therefore not evidence that the pending inventory was applied,
 	// and reporting a completed update here would be a claim the command
 	// cannot support. Re-list the scopes the run was asked to apply and claim
-	// the mutation only when those entries are gone; otherwise the source
-	// stays pending and the coordinator reports it as unchanged.
-	changed, err := p.updatesCleared(ctx, scopes)
+	// the mutation only when those applied entries are gone; otherwise the
+	// source stays pending and the coordinator reports it as unchanged.
+	// Newly appeared updates (published between check and apply) were not
+	// part of the applied set and do not mark the run unchanged.
+	changed, err := p.updatesCleared(ctx, items, scopes)
 	if err != nil {
 		return updateflow.ApplyResult{}, err
 	}
 	return updateflow.ApplyResult{Changed: changed}, nil
 }
 
-// updatesCleared reports whether the scopes that ran an update no longer
-// list any available updates. It is the post-hoc reconciliation flatpak
-// requires: the tool has no dry-run, so the only proof that a zero exit
-// applied the inventory is that the inventory is gone.
-func (p *flatpakProvider) updatesCleared(ctx context.Context, scopes map[string]bool) (bool, error) {
+// updatesCleared reports whether all applied updates in the scopes that ran an
+// update are no longer listed in available updates. It is the post-hoc
+// reconciliation flatpak requires: the tool has no dry-run, so the only proof
+// that a zero exit applied the inventory is that the inventory is gone.
+// Newly appeared updates (updates published after the check) were not part of
+// the applied set and do not mark the run unchanged.
+func (p *flatpakProvider) updatesCleared(ctx context.Context, items []updateflow.Item, scopes map[string]bool) (bool, error) {
 	for _, user := range []bool{true, false} {
 		scope := "system"
 		if user {
@@ -116,11 +120,43 @@ func (p *flatpakProvider) updatesCleared(ctx context.Context, scopes map[string]
 		if err != nil {
 			return false, fmt.Errorf("verify Flatpak updates after apply: %w", err)
 		}
-		if len(updates) > 0 {
+		applied := appliedRefsForScope(items, scope)
+		if len(applied) == 0 {
 			return false, nil
+		}
+		for _, u := range updates {
+			if updateMatchesApplied(u, applied) {
+				return false, nil
+			}
 		}
 	}
 	return true, nil
+}
+
+func appliedRefsForScope(items []updateflow.Item, scope string) map[string]bool {
+	refs := make(map[string]bool)
+	for _, item := range items {
+		if item.Scope != scope {
+			continue
+		}
+		if item.ID != "" {
+			refs[item.ID] = true
+		}
+		if item.Name != "" {
+			refs[item.Name] = true
+		}
+	}
+	return refs
+}
+
+func updateMatchesApplied(u flatpak.UpdateInfo, appliedRefs map[string]bool) bool {
+	if u.ApplicationID != "" && appliedRefs[u.ApplicationID] {
+		return true
+	}
+	if u.Name != "" && appliedRefs[u.Name] {
+		return true
+	}
+	return false
 }
 
 func (p *flatpakProvider) isDryRun() bool {

@@ -222,7 +222,10 @@ An agent must not break these:
   `operating-system`), and it executes nothing itself — every provider is an
   `updateflow.Provider` whose production value in `internal/updateproviders`
   wraps the existing `internal/flatpak`, `internal/homebrew`,
-  `internal/updex`, and `internal/bootc` entry points.
+  `internal/updex`, and `internal/bootc` entry points. Flatpak post-apply
+  reconciliation verifies that the specific pending refs applied for each
+  executed scope are no longer listed post-apply, so newly appeared updates
+  published between check and apply do not mark the run unchanged.
   `internal/views/updatepresent` is the equally pure presentation layer: it
   maps one immutable snapshot to a title, description, banner, and action
   label, so the shell's copy is testable on a headless host.

@@ -566,6 +566,10 @@ so runtimes and extensions are deliberately excluded from the results. Update
 rows and the sidebar update badge therefore only ever describe applications,
 which is what the user can act on from the applications page.
 
+### Post-apply reconciliation
+
+`flatpak update` exits 0 on paths that pull nothing (such as printing "Nothing to update."). A zero exit is therefore not evidence that pending updates landed. `internal/updateproviders.NewFlatpak` reconciles each executed scope by re-listing updates post-apply and comparing them against the specific set of refs that were pending and applied for that scope. The mutation reports `Changed: true` only when all applied refs for each executed scope have cleared (none of the applied refs remain in the post-apply listing). Newly appeared updates published between check and apply are not in the applied set and do not mark the run unchanged.
+
 ## Developer workstation options (`internal/devtools`)
 
 Features keeps the **Developer Mode** access switch and presents **WSL Mode**,
