@@ -174,7 +174,9 @@ are not new routes. A target route never creates a second copy of the owner.
 | S3 | Enable/disable distribution feature | System / Distribution features | `onFeatureToggled` | `internal/updex` fixed helper |
 | S4 | Check/update distribution features | System / Distribution features | `onUpdateFeaturesClicked` (reads via `checkFeatureUpdates`) | `internal/updex`; U1's system-components source uses same provider |
 | S5 | Roll Back to previous deployment | System / Recovery | `onBootcRollbackClicked` | `ublue.Rollback`; existing target only, completes gate after live success, no restart |
-| S6 | Check/Check Again published versions; expand list | System / Recovery | `onPublishedVersionsClicked` | `internal/registrytags.Catalog`; read-only, no pin/switch action |
+| S6 | Check/Check Again published versions; expand list | System / Recovery | `onPublishedVersionsClicked` | `internal/registrytags.Catalog`; lists dated builds of the running stream |
+| S6a | Pin to a published dated build | System / Recovery | `confirmPin` / `runPin` | `ublue.Pin`; fixed helper, validated day word only, confirmed via dialog |
+| S6b | Return to stream (unpin) | System / Recovery | `confirmReturnToStream` / `runReturnToStream` | `ublue.Unpin`; fixed helper, offered when booted on dated tag, confirmed via dialog |
 | S7 | Free up space; post-update cleanup | System / Storage (also composed by U1) | `internal/updateproviders` cleanup runner | Typed cleanup steps; manual presentation via `onFreeUpSpaceClicked`, never configured scripts |
 | S8 | Execute each configured `actions[]` entry, including default Clean Up Boot Old Entries | System / Administrator maintenance | `runMaintenanceAction` | `pageview.MaintenanceCommand` → `internal/maintenanceexec`; existing trusted-config sudo rules, five-minute timeout |
 | S9 | Confirm Powerwash | System / Recovery | `onPowerwashClicked` | `internal/powerwash`; user-scope reset, opt-in `reset_group` |

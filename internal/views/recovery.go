@@ -6,6 +6,7 @@ import (
 
 	"github.com/projectbluefin/chairlift/internal/bootc"
 	"github.com/projectbluefin/chairlift/internal/dryrun"
+	"github.com/projectbluefin/chairlift/internal/registrytags"
 	"github.com/projectbluefin/chairlift/internal/ublue"
 	"github.com/projectbluefin/chairlift/internal/ubluehelper"
 	"github.com/projectbluefin/chairlift/internal/views/actionmsg"
@@ -118,12 +119,107 @@ func (uh *UserHome) buildRecoveryRollbackGroup(page *adw.PreferencesPage) {
 	group.SetTitle("Roll Back")
 	group.SetDescription("Return to the previous system version if an update went badly")
 	group.Add(&uh.bootcRollbackRow.Widget)
+	// The return to stream row is offered when booted on a dated tag.
 	// The published-versions list is a bootc image concept: it reads the
 	// registry the booted image comes from.
 	if uh.groupEnabled("updates_page", "bootc_updates_group") {
+		uh.buildReturnToStreamRow(group)
 		uh.buildPublishedVersionsRow(group)
 	}
 	page.Add(group)
+}
+
+// buildReturnToStreamRow builds the Return to stream row on the Recovery
+// page when booted on a dated tag.
+func (uh *UserHome) buildReturnToStreamRow(group *adw.PreferencesGroup) {
+	status := ublue.StatusCached()
+	build, pinned := registrytags.ParseBuild(status.Tag)
+	if !status.Available || !pinned {
+		return
+	}
+
+	stream := build.Stream
+	supported := status.Supports(ubluehelper.CommandUnpin)
+	presentation := pageview.UnpinRow(stream, supported)
+
+	row := adw.NewActionRow()
+	row.SetTitle(presentation.Title)
+	row.SetSubtitle(presentation.Subtitle)
+
+	btn := gtk.NewButtonWithLabel("Return to Stream")
+	btn.SetValign(gtk.AlignCenterValue)
+	btn.SetSensitive(supported)
+	if !supported {
+		btn.SetTooltipText(pageview.UnpinUnsupportedExplanation())
+	} else {
+		clickedCb := func(gtk.Button) {
+			uh.confirmReturnToStream(stream, btn)
+		}
+		btn.ConnectClicked(&clickedCb)
+	}
+
+	row.AddSuffix(&btn.Widget)
+	group.Add(&row.Widget)
+	uh.unpinRow = row
+	uh.unpinBtn = btn
+}
+
+// confirmReturnToStream presents an AdwAlertDialog confirmation before
+// returning to the regular release stream.
+func (uh *UserHome) confirmReturnToStream(stream string, button *gtk.Button) {
+	if !uh.unpinGate.TryStart() {
+		return
+	}
+
+	title, body := pageview.UnpinConfirmation(stream)
+	dialog := adw.NewAlertDialog(title, body)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("confirm", "Return to Stream")
+	dialog.SetResponseAppearance("confirm", adw.ResponseSuggestedValue)
+
+	uh.recoveryDialogs.connect(dialog, func(response string) {
+		if response != "confirm" {
+			uh.unpinGate.Reset()
+			return
+		}
+		uh.runReturnToStream(button)
+	})
+	dialog.Present(&uh.recoveryPrefsPage.Widget)
+}
+
+// runReturnToStream unpins the machine and returns to the stream via
+// pkexec chairlift-helper unpin.
+func (uh *UserHome) runReturnToStream(button *gtk.Button) {
+	button.SetSensitive(false)
+	button.SetLabel("Returning…")
+
+	go func() {
+		ctx, cancel := ublue.DefaultContext()
+		defer cancel()
+
+		err := ublue.Unpin(ctx)
+
+		sgtk.RunOnMainThread(func() {
+			uh.unpinGate.Reset()
+			button.SetSensitive(true)
+			button.SetLabel("Return to Stream")
+
+			if err != nil {
+				log.Printf("views: return to stream failed: %v", err)
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Return to stream failed: %v", err))
+				return
+			}
+
+			decision := actionmsg.ReturnToStream(dryrun.Enabled())
+			if decision.Confirm {
+				go uh.loadBootcRollbackStatus()
+				if uh.updateShell != nil {
+					uh.updateShell.StartCheck()
+				}
+			}
+			uh.toastAdder.ShowToast(decision.Toast)
+		})
+	}()
 }
 
 // loadBootcRollbackStatus reveals the Roll Back row when bootc records a

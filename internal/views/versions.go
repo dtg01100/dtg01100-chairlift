@@ -2,11 +2,15 @@ package views
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"time"
 
+	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/registrytags"
 	"github.com/projectbluefin/chairlift/internal/ublue"
+	"github.com/projectbluefin/chairlift/internal/ubluehelper"
+	"github.com/projectbluefin/chairlift/internal/views/actionmsg"
 	"github.com/projectbluefin/chairlift/internal/views/pageview"
 
 	sgtk "github.com/frostyard/snowkit/gtk"
@@ -106,9 +110,9 @@ func (uh *UserHome) onPublishedVersionsClicked() {
 }
 
 // renderPublishedVersions replaces the rows under the Published versions
-// row. The rows carry no signal handlers, so a repeat read rebuilds them
-// without growing the process's callback count.
-func (uh *UserHome) renderPublishedVersions(versions []pageview.Row) {
+// row. The rows use buttonRoute so repeat reads reuse callback trampolines
+// without leaking puregotk callback slots.
+func (uh *UserHome) renderPublishedVersions(versions []pageview.PublishedVersion) {
 	parent := uh.publishedVersionsRow
 	if parent == nil {
 		return
@@ -118,15 +122,103 @@ func (uh *UserHome) renderPublishedVersions(versions []pageview.Row) {
 		parent.Remove(&row.Widget)
 	}
 	uh.publishedVersionRows = nil
+	uh.publishedVersionButtons.clear()
+
+	supported := ublue.StatusCached().Supports(ubluehelper.CommandPin)
+	status := ublue.StatusCached()
+	bootedBuild, isBootedPinned := registrytags.ParseBuild(status.Tag)
 
 	for _, version := range versions {
 		row := adw.NewActionRow()
 		row.SetTitle(version.Title)
-		row.SetSubtitle(version.Subtitle)
+		subtitle := version.Subtitle
+		if !supported {
+			subtitle += " · " + pageview.PinUnsupportedExplanation()
+		}
+		row.SetSubtitle(subtitle)
+
+		btn := gtk.NewButtonWithLabel("Pin")
+		btn.SetValign(gtk.AlignCenterValue)
+
+		isAlreadyPinned := isBootedPinned && bootedBuild.Date.Format("20060102") == version.Day
+		switch {
+		case !supported:
+			btn.SetSensitive(false)
+			btn.SetTooltipText(pageview.PinUnsupportedExplanation())
+		case isAlreadyPinned:
+			btn.SetLabel("Pinned")
+			btn.SetSensitive(false)
+		default:
+			btn.SetSensitive(true)
+			vTitle := version.Title
+			vDay := version.Day
+			uh.publishedVersionButtons.connect(btn, func(gtk.Button) {
+				uh.confirmPin(vTitle, vDay, btn)
+			})
+		}
+
+		row.AddSuffix(&btn.Widget)
 		parent.AddRow(&row.Widget)
 		uh.publishedVersionRows = append(uh.publishedVersionRows, row)
 	}
 
 	parent.SetEnableExpansion(len(versions) > 0)
 	parent.SetExpanded(len(versions) > 0)
+}
+
+// confirmPin presents an AdwAlertDialog confirmation before staging a switch to
+// the selected dated build.
+func (uh *UserHome) confirmPin(date, day string, button *gtk.Button) {
+	if !uh.pinGate.TryStart() {
+		return
+	}
+
+	title, body := pageview.PinConfirmation(date)
+	dialog := adw.NewAlertDialog(title, body)
+	dialog.AddResponse("cancel", "Cancel")
+	dialog.AddResponse("confirm", "Pin")
+	dialog.SetResponseAppearance("confirm", adw.ResponseSuggestedValue)
+
+	uh.recoveryDialogs.connect(dialog, func(response string) {
+		if response != "confirm" {
+			uh.pinGate.Reset()
+			return
+		}
+		uh.runPin(day, button)
+	})
+	dialog.Present(&uh.recoveryPrefsPage.Widget)
+}
+
+// runPin stages the dated build via pkexec chairlift-helper pin <day>.
+func (uh *UserHome) runPin(day string, button *gtk.Button) {
+	button.SetSensitive(false)
+	button.SetLabel("Pinning…")
+
+	go func() {
+		ctx, cancel := ublue.DefaultContext()
+		defer cancel()
+
+		err := ublue.Pin(ctx, day)
+
+		sgtk.RunOnMainThread(func() {
+			uh.pinGate.Reset()
+			button.SetSensitive(true)
+			button.SetLabel("Pin")
+
+			if err != nil {
+				log.Printf("views: pin failed for day %s: %v", day, err)
+				uh.toastAdder.ShowErrorToast(fmt.Sprintf("Pin failed: %v", err))
+				return
+			}
+
+			decision := actionmsg.PinBuild(dryrun.Enabled(), day)
+			if decision.Confirm {
+				go uh.loadBootcRollbackStatus()
+				if uh.updateShell != nil {
+					uh.updateShell.StartCheck()
+				}
+			}
+			uh.toastAdder.ShowToast(decision.Toast)
+		})
+	}()
 }

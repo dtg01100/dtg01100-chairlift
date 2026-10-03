@@ -188,6 +188,59 @@ Feature: Maintenance and its Recovery detail
     And I do not see "versions from the last 90 days"
     And the action journal is empty
 
+  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools @stub.maintenance_published_versions
+  Scenario: Cancelling pin to a published version leaves the build unpinned and controls available
+    Given ChairLift is running
+    When I open the "Maintenance" page
+    And I open the Recovery detail
+    And I click the "Check" button in the "Published versions" row
+    Then the "Check Again" button is shown
+    When I click the "Pin" button in the "13 September 2026" row
+    Then a dialog titled "Pin to 13 September 2026?" is shown
+    And the dialog says "This stages a switch to the build from 13 September 2026. Automatic updates will stay at this version until you return to the stream. The change applies the next time you restart."
+    When I choose "Cancel" in the dialog
+    Then no dialog is shown
+    And the "Pin" button in the "13 September 2026" row is sensitive
+    And the action journal is empty
+
+  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools @stub.maintenance_published_versions
+  Scenario: Confirming pin to a published version journals the pin command and keeps controls usable
+    Given ChairLift is running
+    When I open the "Maintenance" page
+    And I open the Recovery detail
+    And I click the "Check" button in the "Published versions" row
+    Then the "Check Again" button is shown
+    When I click the "Pin" button in the "13 September 2026" row
+    Then a dialog titled "Pin to 13 September 2026?" is shown
+    When I choose "Pin" in the dialog
+    Then I see "[DRY-RUN] Preview: would pin to build 20260913 — no changes made"
+    And no dialog is shown
+    And the action journal records "pin" as dry-run
+    And the journalled command is "pkexec /usr/bin/chairlift-helper pin 20260913 --dry-run"
+    And the "Pin" button in the "13 September 2026" row is sensitive
+
+  @stub.maintenance_bootc_pinned @stub.maintenance_package_tools
+  Scenario: A host booted on a dated tag offers returning to the stream and journals unpin
+    Given ChairLift is running
+    When I open the "Maintenance" page
+    And I open the Recovery detail
+    Then I see "Return to stream"
+    And the "Return to stream" row says "Switch back to the latest updates on the latest stream"
+    When I click the "Return to Stream" button in the "Return to stream" row
+    Then a dialog titled "Return to Stream?" is shown
+    And the dialog says "This stages a switch back to regular updates on the latest stream. The change applies the next time you restart."
+    When I choose "Cancel" in the dialog
+    Then no dialog is shown
+    And the "Return to Stream" button in the "Return to stream" row is sensitive
+    When I click the "Return to Stream" button in the "Return to stream" row
+    And I choose "Return to Stream" in the dialog
+    Then I see "[DRY-RUN] Preview: would return to the stream — no changes made"
+    And no dialog is shown
+    And the action journal records "unpin" as dry-run
+    And the journalled command is "pkexec /usr/bin/chairlift-helper unpin --dry-run"
+    And the journalled action carries no argument
+    And the "Return to Stream" button in the "Return to stream" row is sensitive
+
   # ------------------------------------------------ configuration & capability
 
   @config.maintenance-shipped @stub.maintenance_bootc_rollback @stub.maintenance_package_tools

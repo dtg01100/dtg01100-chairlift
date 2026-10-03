@@ -237,6 +237,12 @@ type UserHome struct {
 	publishedVersionsRow    *adw.ExpanderRow
 	publishedVersionsButton *gtk.Button
 	publishedVersionRows    []*adw.ActionRow
+	publishedVersionButtons buttonRoute
+	recoveryDialogs         dialogRoute
+	pinGate                 actionstate.Gate
+	unpinGate               actionstate.Gate
+	unpinRow                *adw.ActionRow
+	unpinBtn                *gtk.Button
 	publishedVersionsRepo   string
 	publishedVersionsStream string
 	publishedVersionsGate   actionstate.Gate

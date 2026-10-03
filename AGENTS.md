@@ -741,10 +741,13 @@ An agent must not break these:
   bounded by `MaxEntries` and expiring at `TTL`, and its callers run off the
   GTK main thread, so it must stay safe for concurrent readers. `Catalog`'s
   one caller is the Recovery page's **Published versions** row
-  (`internal/views/versions.go`), which reads only when the user presses
+  (`internal/views/versions.go`), which reads the registry when the user presses
   Check, lists one row per day of the running stream
-  (`pageview.PublishedVersions` drops other streams' aliases), and removes the
-  last list when a read fails rather than leaving it standing as current.
+  (`pageview.PublishedVersions` drops other streams' aliases), removes the
+  last list when a read fails rather than leaving it standing as current,
+  and offers a confirmed Pin action for each build that stages a switch to
+  that dated tag (`chairlift-helper pin <YYYYMMDD>`). When booted on a dated
+  tag, Recovery offers **Return to stream** (`chairlift-helper unpin`).
   `internal/bootc.CheckUpdate` also calls `Client.Tag` directly on composefs
   hosts (below); it only compares digests.
 - **Reading OS state never needs a password.** bootc 1.16 refuses
