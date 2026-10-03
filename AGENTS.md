@@ -158,6 +158,13 @@ control is hand-written Go, YAML, and data assets.
   on load, and re-reads after changes instead of treating exit 0 as proof.
   `desktop_integrations_group` stays discoverable on unsupported hosts with
   insensitive switches. Dry-run skips mutation and restores observed state.
+- **Legacy desktop launcher cleanup runs off the main thread.** Older frostyard
+  installs left `~/.local/share/applications/org.frostyard.ChairLift.desktop`. At
+  startup ChairLift asynchronously removes that file if and only if it is a
+  regular file with `Type=Application` and an `Exec` whose program basename is
+  `chairlift` or `chairlift-wrapper`; non-matching files, symlinks, and missing
+  files are left untouched, and dry-run logs what would be removed without
+  deleting.
 
 An agent must not break these:
 
