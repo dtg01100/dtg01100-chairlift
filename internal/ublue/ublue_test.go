@@ -571,8 +571,8 @@ func TestRunHelperJournalsEveryInvocation(t *testing.T) {
 	}
 
 	entries := readJournal(t, path)
-	if len(entries) != 1 {
-		t.Fatalf("journal has %d entries, want 1", len(entries))
+	if len(entries) != 2 {
+		t.Fatalf("journal has %d entries, want 2 (dispatch and outcome)", len(entries))
 	}
 	entry := entries[0]
 	if entry.Action != ubluehelper.CommandChannelSwitch {
@@ -584,6 +584,10 @@ func TestRunHelperJournalsEveryInvocation(t *testing.T) {
 	wantArgv := []string{pkexec, HelperPath, ubluehelper.CommandChannelSwitch, "testing"}
 	if !reflect.DeepEqual(entry.WouldRun, wantArgv) {
 		t.Errorf("journalled WouldRun = %v, want %v", entry.WouldRun, wantArgv)
+	}
+	outcome := entries[1]
+	if outcome.Action != ubluehelper.CommandChannelSwitch || outcome.Outcome != journal.OutcomeSucceeded {
+		t.Errorf("outcome = %+v, want action channel-switch outcome succeeded", outcome)
 	}
 }
 

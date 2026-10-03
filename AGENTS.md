@@ -602,7 +602,11 @@ An agent must not break these:
   change.
 - **Every privileged dispatch point journals, unconditionally.** `internal/ublue.runHelper`
   and `internal/updex.runHelper` call `journal.Record` on every invocation, dry-run
-  or live, before doing anything else. This is not a `chairlift_e2e` stub: with
+  or live, before doing anything else, and record the execution outcome
+  (`succeeded`, `refused`, `failed`, `timed-out`, or `cancelled`) and any
+  concrete privileged command derived inside the helper (`executed`) after the
+  command returns. Dry-run remains recorded as suppressed with no outcome
+  record. This is not a `chairlift_e2e` stub: with
   `$CHAIRLIFT_ACTION_JOURNAL` unset — every ordinary run — it costs one atomic
   load and does nothing else, so it ships in every released binary. Do not gate
   a new privileged call behind a helper that bypasses `runHelper`; the journal's

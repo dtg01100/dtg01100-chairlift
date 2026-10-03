@@ -35,8 +35,9 @@ var codeNameExemptions = map[string]string{
 	"CONFIGURATION ERROR: %s; all feature groups were disabled; fix the configuration file and restart ChairLift":                       "log line, not the toast; internal/config.LoadError.ToastMessage is the user-facing counterpart and uses branding.AppName",
 	"sudo actions are only permitted in trusted configurations (/etc/chairlift, /usr/share/chairlift) (line %d)":                        "user-visible validation error, but the code name appears only as the two trusted configuration directories, which are filesystem paths fixed by ADR-0002",
 	"group %q enables sudo action %q; sudo actions are only permitted in trusted configurations (/etc/chairlift, /usr/share/chairlift)": "same: the code name appears only as filesystem paths the user must actually navigate to",
-	"chairlift-printer-": "unit and container name prefix for rootless printer applications (issue #329); a path/name component, never shown as prose",
-	".chairlift-":        "temporary configuration filename prefix, never displayed as product prose",
+	"chairlift-printer-":      "unit and container name prefix for rootless printer applications (issue #329); a path/name component, never shown as prose",
+	".chairlift-":             "temporary configuration filename prefix, never displayed as product prose",
+	"chairlift-helper: exec ": "machine-readable execution prefix emitted by the privileged helper to communicate derived commands to the GUI",
 }
 
 // exemptStructurally reports whether a literal spelling the code name is a
