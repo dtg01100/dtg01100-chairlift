@@ -20,6 +20,7 @@ import (
 	sgtk "github.com/frostyard/snowkit/gtk"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gobject"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
@@ -211,6 +212,10 @@ type UserHome struct {
 	gamingDialogs     dialogRoute
 	developerOptions  []*developerOptionRow
 	developerButtons  buttonRoute
+	wslBackend        string
+	wslCombo          *adw.ComboRow
+	wslSuppress       bool
+	wslBackendNotify  func(gobject.Object, uintptr)
 	driverRow         *adw.ActionRow
 	driverButton      *gtk.Button
 	driverGate        actionstate.Gate

@@ -223,7 +223,15 @@ def no_descriptor(context):
 
 @stub("features-developer")
 def developer_options(context):
-    """A running Ubuntu guest and Docker CLI with no system daemon."""
+    """A running nsl machine, running Ubuntu guest, and Docker CLI with no system daemon."""
+    fake_executable(context, "nsl", _recorder(context) + """
+case "$1" in
+  list) printf '%s\n' 'VM\tSTATE\tIMAGE\tRESOURCES\tDATA DISK' 'shared\trunning\t-\t4 CPUs, 8 GiB\t20 GiB' '' 'MACHINE\tSTATE\tIMAGE\tTIER\tDEFAULT' 'debian\trunning\tdebian:13\tshared\t*' ;;
+  run) exit 0 ;;
+  doctor) exit 0 ;;
+esac
+exit 0
+""")
     fake_executable(context, "limactl", _recorder(context) + """
 case "$1" in
   list) echo '{"name":"ubuntu","status":"Running"}' ;;

@@ -51,6 +51,7 @@ Feature: Features page — Developer Mode, WSL Mode, Docker, selective Gaming, a
     When I open the "Features" page
     Then I see "Developer Mode"
     And I see "WSL Mode"
+    And I see "WSL Backend"
     And I see "Enable Docker"
     When I expand the "IDEs and terminal editors" list under "Developer"
     Then the developer editor choices match the documented catalog
@@ -65,13 +66,14 @@ Feature: Features page — Developer Mode, WSL Mode, Docker, selective Gaming, a
   Scenario: Disabling a running WSL machine previews stop without deleting data
     Given ChairLift is running
     When I open the "Features" page
-    Then the switch in the "WSL Mode" row is on
+    Then I see "WSL Backend"
+    And the switch in the "WSL Mode" row is on
     When I toggle the switch in the "WSL Mode" row
-    Then the application log contains "would disable Ubuntu autostart and stop the VM without deleting data"
+    Then the application log contains "would stop nsl machines and VM without deleting data"
     And the switch in the "WSL Mode" row is on
     And the switch in the "WSL Mode" row accepts input
-    And the fake limactl was never asked to "stop"
-    And the fake limactl was never asked to "delete"
+    And the fake nsl was never asked to "shutdown"
+    And the fake nsl was never asked to "remove"
     And the action journal is empty
 
   @stub.features-gaming-none @stub.features-developer
@@ -178,6 +180,7 @@ Feature: Features page — Developer Mode, WSL Mode, Docker, selective Gaming, a
     Then the Features page shows a "Gaming" group
     And the Features page shows no "Developer" group
     And I do not see "WSL Mode"
+    And I do not see "WSL Backend"
     And I do not see "Enable Docker"
 
   @config.features-no-desktop @stub.features-no-descriptor @stub.features-gaming-none

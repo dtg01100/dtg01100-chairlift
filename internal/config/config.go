@@ -42,6 +42,10 @@ type GroupConfig struct {
 	// it.
 	InstallPulp bool `yaml:"install_pulp,omitempty"`
 	StageFeeds  bool `yaml:"stage_feeds,omitempty"`
+
+	// WSLBackend is the virtual-machine backend for WSL Mode ("nsl" or "lima").
+	// Defaults to "nsl".
+	WSLBackend string `yaml:"wsl_backend,omitempty"`
 }
 
 // ActionConfig represents a configurable action
@@ -84,6 +88,7 @@ type rawGroupConfig struct {
 	BundlesPaths *[]string       `yaml:"bundles_paths"`
 	InstallPulp  *bool           `yaml:"install_pulp"`
 	StageFeeds   *bool           `yaml:"stage_feeds"`
+	WSLBackend   *string         `yaml:"wsl_backend"`
 }
 
 // trustedConfigPaths are the fixed administrator- and package-owned candidates
@@ -302,6 +307,9 @@ func mergeGroup(def GroupConfig, raw rawGroupConfig) GroupConfig {
 	if raw.StageFeeds != nil {
 		result.StageFeeds = *raw.StageFeeds
 	}
+	if raw.WSLBackend != nil {
+		result.WSLBackend = *raw.WSLBackend
+	}
 
 	return result
 }
@@ -378,8 +386,8 @@ func defaultConfig() *Config {
 			// is left at its zero value here on purpose: enabling developer
 			// access and installing a feed reader for the account are
 			// separate decisions, and only the first one is what the switch
-			// says it does.
-			"dx_group":     GroupConfig{Enabled: true},
+			// says it does. WSLBackend defaults to "nsl".
+			"dx_group":     GroupConfig{Enabled: true, WSLBackend: "nsl"},
 			"gaming_group": GroupConfig{Enabled: true},
 			// Printer applications: one rootless quadlet per driver family,
 			// floored on Podman by internal/capability. Enabled because the

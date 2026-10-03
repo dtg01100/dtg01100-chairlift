@@ -123,12 +123,13 @@ two surviving groups to `updates_page` and remove `system_page` when convenient.
 - `desktop_integrations_group`: Tailscale Integration and Sync Folder Integration GNOME extension switches. Enabled by default; missing extensions or an unavailable GNOME session leave the switches insensitive with an explanation. Existing GNOME preferences are read on load and only explicit user actions change them.
 - `features_group`: System features managed by updex (requires `updex` command)
 - `dx_group`: Developer Mode; adds the invoking account to container, VM, and serial-device groups (shown only when `/usr/share/ublue-os/image-info.json` is present)
+  - `wsl_backend`: Backend for WSL Mode (`nsl` or `lima`). Defaults to `nsl`
   - `install_pulp`: After a confirmed enable, install the Pulp feed reader (`org.gnome.gitlab.cheywood.Pulp`) as a user-scope Flatpak. Defaults to `false`. Unprivileged and opt-in: it installs for the invoking account only, and a failure here is reported as its own failure rather than rolling back developer access
   - `stage_feeds`: After a confirmed enable, write the curated developer feed catalog to `~/.local/share/chairlift/developer-feeds.opml` so the user can import it into their reader. Defaults to `false`. ChairLift writes the file and stops — nothing is imported automatically, and Pulp's own database is never touched. Disabling Developer Mode never removes Pulp, the staged file, or anything already imported from it
 - `gaming_group`: Selective Gaming applications and runtime extensions, with installed user/system states, preserved system entries and visible partial failures (shown only when `/usr/share/ublue-os/image-info.json` is present)
 - `printers_group`: Printer applications; one switch per driver family (Ghostscript, HPLIP, Gutenprint), each a rootless Podman quadlet under `~/.config/containers/systemd` driven with `systemctl --user`, with no `pkexec` route (shown only when `podman` is on `$PATH`). A family can be turned on only when its image's web administration can be authenticated or disabled ([ADR-0016](docs/adr/0016-printer-app-admin-denied-until-authenticated.md)); until the published images accept that setting, every switch is shown locked and says so
 
-The Developer group also offers WSL Mode (Lima), Docker, and individually
+The Developer group also offers WSL Mode (nsl by default, with Lima as alternative), Docker, and individually
 selected IDEs and terminal editors, with one JetBrains Toolbox entry. Missing
 fixed helper actions disable only affected switches, not their discoverability.
 KVM permission changes require a new login; Docker needs an accessible daemon
@@ -243,7 +244,7 @@ install -D -m 644 config.yml debian/tmp/usr/share/chairlift/config.yml
     (`true` for every group except `maintenance_cleanup_group` and
     `reset_group`, which default to `false`)
   - An omitted optional field (`app_id`, `website`, `issues`, `chat`,
-    `actions`, `bundles_paths`, `install_pulp`, `stage_feeds`) inherits its
+    `actions`, `bundles_paths`, `install_pulp`, `stage_feeds`, `wsl_backend`) inherits its
     documented default value
   - An explicit empty list (e.g. `actions: []`) clears the field
   - A non-empty list, or an explicitly set scalar value, replaces the
