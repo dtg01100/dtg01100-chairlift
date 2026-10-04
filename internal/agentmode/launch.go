@@ -1,7 +1,6 @@
 package agentmode
 
 import (
-	"context"
 	"errors"
 	"log"
 	"os/exec"
@@ -11,15 +10,20 @@ import (
 	"github.com/projectbluefin/chairlift/internal/launcher"
 )
 
-var startCmd = launcher.Start
+var (
+	resolveExecutable = aistack.Executable
+	startCmd          = launcher.Start
+)
 
 // Launch starts Goose Desktop through llmman's invocation-scoped desktop integration
-// using the active model. It preserves persistent Goose configuration.
-func Launch(ctx context.Context, model string, reportFailure func(error)) error {
+// using the active model. It uses exec.Command without a context so the long-lived GUI
+// process is not tied to a caller's timeout or cancellation. Persistent Goose
+// configuration is left unchanged.
+func Launch(model string, reportFailure func(error)) error {
 	if model == "" {
 		return errors.New("no active model selected")
 	}
-	exe := aistack.Executable()
+	exe := resolveExecutable()
 	if exe == "" {
 		return errors.New("llmman executable not found")
 	}
@@ -27,6 +31,6 @@ func Launch(ctx context.Context, model string, reportFailure func(error)) error 
 		log.Printf("[DRY-RUN] would launch Goose Desktop with model %s via llmman", model)
 		return nil
 	}
-	cmd := exec.CommandContext(ctx, exe, "launch", "goose-desktop", "--model", model)
+	cmd := exec.Command(exe, "launch", "goose-desktop", "--model", model)
 	return startCmd(cmd, reportFailure)
 }

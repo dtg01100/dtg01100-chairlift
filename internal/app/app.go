@@ -16,6 +16,7 @@ import (
 	"github.com/projectbluefin/chairlift/internal/window"
 
 	"github.com/frostyard/snowkit/gobj"
+	sgtk "github.com/frostyard/snowkit/gtk"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gio"
@@ -163,29 +164,36 @@ func (a *Application) onCommandLine(cl *gio.ApplicationCommandLine) int32 {
 	running := a.window != nil
 
 	if askBluefin {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_, facts, _ := agentmode.ObserveLive(ctx)
-		decision := agentmode.Dispatch(facts)
-		if decision.Action == agentmode.DispatchLaunch {
-			launchErr := agentmode.Launch(ctx, decision.Model, func(asyncErr error) {
-				log.Printf("app: goose desktop exited with error: %v", asyncErr)
+		a.Hold()
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, facts, _ := agentmode.ObserveLive(ctx)
+			decision := agentmode.Dispatch(facts)
+
+			sgtk.RunOnMainThread(func() {
+				defer a.Release()
+				if decision.Action == agentmode.DispatchLaunch {
+					launchErr := agentmode.Launch(decision.Model, func(asyncErr error) {
+						log.Printf("app: goose desktop exited with error: %v", asyncErr)
+					})
+					if launchErr == nil {
+						return
+					}
+					decision.Reason = "Failed to launch Goose Desktop."
+				}
+
+				a.askBluefinRequested = true
+				a.askBluefinReason = decision.Reason
+
+				a.Activate()
+
+				if a.window != nil {
+					a.window.NavigateToAgentsPage()
+					a.window.ShowMissingPrerequisite(decision.Reason)
+				}
 			})
-			if launchErr == nil {
-				return 0
-			}
-			decision.Reason = "Failed to launch Goose Desktop."
-		}
-
-		a.askBluefinRequested = true
-		a.askBluefinReason = decision.Reason
-
-		a.Activate()
-
-		if running && a.window != nil {
-			a.window.NavigateToAgentsPage()
-			a.window.ShowMissingPrerequisite(decision.Reason)
-		}
+		}()
 		return 0
 	}
 

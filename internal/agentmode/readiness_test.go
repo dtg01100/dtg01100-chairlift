@@ -5,9 +5,12 @@ import (
 	"errors"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/projectbluefin/chairlift/internal/dryrun"
+	"github.com/projectbluefin/chairlift/internal/launcher"
 	"github.com/projectbluefin/chairlift/internal/troubleshoot"
 )
 
@@ -181,7 +184,7 @@ func TestLaunchDryRun(t *testing.T) {
 	}
 	defer func() { startCmd = origStart }()
 
-	err := Launch(context.Background(), "unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
+	err := Launch("unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
 	if err != nil {
 		t.Fatalf("Launch() in dry-run returned error: %v", err)
 	}
@@ -194,7 +197,7 @@ func TestLaunchFailed(t *testing.T) {
 	dryrun.Set(false)
 
 	t.Run("empty model", func(t *testing.T) {
-		err := Launch(context.Background(), "", nil)
+		err := Launch("", nil)
 		if err == nil || !strings.Contains(err.Error(), "no active model") {
 			t.Errorf("Launch() with empty model want error, got %v", err)
 		}
@@ -208,9 +211,57 @@ func TestLaunchFailed(t *testing.T) {
 		}
 		defer func() { startCmd = origStart }()
 
-		err := Launch(context.Background(), "unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
+		err := Launch("unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
 		if !errors.Is(err, startFailure) {
 			t.Errorf("Launch() error = %v, want %v", err, startFailure)
 		}
 	})
+}
+
+func TestLaunchChildSurvivesCallerContext(t *testing.T) {
+	dryrun.Set(false)
+
+	origResolve := resolveExecutable
+	origStart := startCmd
+	defer func() {
+		resolveExecutable = origResolve
+		startCmd = origStart
+	}()
+
+	resolveExecutable = func() string { return "sleep" }
+
+	var capturedCmd *exec.Cmd
+	startCmd = func(cmd *exec.Cmd, reportFailure func(error)) error {
+		capturedCmd = cmd
+		// Adjust args so sleep receives valid numeric duration
+		cmd.Args = []string{"sleep", "2"}
+		return launcher.Start(cmd, reportFailure)
+	}
+
+	callerCtx, cancel := context.WithCancel(context.Background())
+	_ = callerCtx // simulate caller holding a context
+
+	err := Launch("test-model", nil)
+	if err != nil {
+		t.Fatalf("Launch failed: %v", err)
+	}
+
+	// Cancel caller's context immediately after Launch returns
+	cancel()
+
+	if capturedCmd == nil || capturedCmd.Process == nil {
+		t.Fatal("expected process to be started, got nil Process")
+	}
+	t.Cleanup(func() {
+		if capturedCmd != nil && capturedCmd.Process != nil {
+			_ = capturedCmd.Process.Kill()
+		}
+	})
+
+	time.Sleep(50 * time.Millisecond)
+
+	// Send signal 0 to test if child process is still alive and not killed by context cancellation
+	if err := capturedCmd.Process.Signal(syscall.Signal(0)); err != nil {
+		t.Errorf("child process was killed upon caller context cancellation: %v", err)
+	}
 }
