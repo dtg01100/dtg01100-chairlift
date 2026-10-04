@@ -87,7 +87,10 @@ type Entry struct {
 	Outcome Outcome `json:"outcome,omitempty"`
 	// ExitCode is the process exit code for failed or refused actions.
 	ExitCode *int `json:"exit_code,omitempty"`
-	// Executed is the concrete privileged command line(s) executed by the helper.
+	// Executed is the concrete privileged command line(s) executed by the
+	// helper. It is self-reported through marker lines on the helper's
+	// output, which its root children inherit, so a child printing the same
+	// marker shape can add an entry: it is an audit aid, not proof.
 	Executed [][]string `json:"executed,omitempty"`
 	// Timestamp is RFC 3339 UTC, for human reading only.
 	Timestamp string `json:"ts"`

@@ -322,6 +322,7 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 		item.button.SetLabel("Installing…")
 	}
 	title := item.row.GetTitle()
+	backend := uh.wslBackend
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -333,8 +334,8 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 		var packages []homebrew.Package
 		switch item.kind {
 		case "wsl":
-			err = devtools.SetWSL(ctx, uh.wslBackend, enabled, progress)
-			wsl, stateErr = devtools.WSLStatus(ctx, uh.wslBackend)
+			err = devtools.SetWSL(ctx, backend, enabled, progress)
+			wsl, stateErr = devtools.WSLStatus(ctx, backend)
 		case "docker":
 			err = devtools.SetDocker(ctx, enabled, progress)
 			docker, stateErr = devtools.DockerStatus(ctx)

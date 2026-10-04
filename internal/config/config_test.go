@@ -659,3 +659,14 @@ func TestWSLBackendDefaultAndOverride(t *testing.T) {
 		}
 	})
 }
+
+func TestWSLBackendRejectsUnknownValue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(path, []byte("features_page:\n  dx_group:\n    enabled: true\n    wsl_backend: lmia\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, loadErr := loadFromPath(path); loadErr == nil {
+		t.Fatal("wsl_backend \"lmia\" loaded without error")
+	}
+}
