@@ -24,8 +24,9 @@ func TestRecoveryEntrySubtitlePointsAtDetailView(t *testing.T) {
 	if sub == "" {
 		t.Fatal("RecoveryEntrySubtitle() is empty")
 	}
-	if !strings.Contains(sub, "Recovery") || !strings.Contains(sub, "appears") {
-		t.Errorf("RecoveryEntrySubtitle() = %q, want it to name the Recovery detail and that it is conditional", sub)
+	want := "Return to a previous system version or reset this machine."
+	if sub != want {
+		t.Errorf("RecoveryEntrySubtitle() = %q, want %q", sub, want)
 	}
 }
 

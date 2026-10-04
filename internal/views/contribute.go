@@ -78,18 +78,28 @@ func (uh *UserHome) onContributeClicked() {
 		return
 	}
 
+	if uh.contributeButton != nil {
+		uh.contributeButton.SetSensitive(false)
+	}
+
 	cmd := contribute.Command("", "", "")
 	err := launcher.Start(cmd, func(exitErr error) {
 		sgtk.RunOnMainThread(func() {
 			uh.contributeGate.Reset()
+			if uh.contributeButton != nil {
+				uh.contributeButton.SetSensitive(true)
+			}
 			if exitErr != nil {
 				log.Printf("views: contribute session exited with error: %v", exitErr)
 				uh.toastAdder.ShowErrorToast("Contribute session exited with an error.")
 			}
 		})
 	})
-	uh.contributeGate.Reset()
 	if err != nil {
+		uh.contributeGate.Reset()
+		if uh.contributeButton != nil {
+			uh.contributeButton.SetSensitive(true)
+		}
 		log.Printf("views: launch contribute failed: %v", err)
 		uh.toastAdder.ShowErrorToast("Could not launch Contribute to Bluefin.")
 	}

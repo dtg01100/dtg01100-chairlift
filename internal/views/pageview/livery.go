@@ -200,7 +200,7 @@ func LiveryIDForIndex(index uint) string {
 // The same honesty the Files row owes, for the same reason.
 func LiveryAppGridRow() Row {
 	return Row{
-		Title:    "Customize the App Grid Icon",
+		Title:    "Customize the App Launcher Icon",
 		Subtitle: "Replaces the Show Applications glyph on GNOME or the Kickoff icon on KDE Plasma",
 	}
 }
@@ -218,7 +218,7 @@ func LiveryAppGridGroupDescription(available bool) string {
 // Custom Command Menu extension never shows the section, so there is no
 // unavailable variant.
 func LiveryPanelRow() Row {
-	return Row{Title: "Customize the Panel Icon", Subtitle: "Replaces the top-bar menu button, in your theme's colour"}
+	return Row{Title: "Customize the Top Bar Icon", Subtitle: "Replaces the top-bar menu button, in your theme's color"}
 }
 
 // LiveryDockRow is the dock section's switch row text.
@@ -230,7 +230,7 @@ func LiveryPanelRow() Row {
 func LiveryDockRow() Row {
 	return Row{
 		Title:    "Customize the Files Icon",
-		Subtitle: "Replaces the Files icon in full colour — on the dock, in the app grid, and in the window switcher",
+		Subtitle: "Replaces the Files icon in full color — on the dock, in the app grid, and in the window switcher",
 	}
 }
 

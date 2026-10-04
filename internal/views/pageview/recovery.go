@@ -21,5 +21,5 @@ func RecoveryPageSubtitle() string {
 // It points the user at the detail view rather than exposing a control here,
 // so the routine System page never reaches a reset.
 func RecoveryEntrySubtitle() string {
-	return "Recovery — return to a previous system version or reset this machine. Only appears when there is something to return to or a reset is enabled."
+	return "Return to a previous system version or reset this machine."
 }

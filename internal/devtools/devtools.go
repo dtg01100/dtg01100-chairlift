@@ -70,14 +70,6 @@ func NSLHostSupported() bool {
 	return runtime.GOOS == "linux" && runtime.GOARCH == "amd64"
 }
 
-// WSLHostSupported reports whether this host architecture can run the selected backend.
-func WSLHostSupported(backend string) bool {
-	if backend == BackendLima {
-		return HostSupported()
-	}
-	return NSLHostSupported()
-}
-
 // NSLInstalled reports whether the nsl binary is found on PATH or Homebrew bin.
 func NSLInstalled() bool {
 	return executable("nsl") != ""
@@ -86,14 +78,6 @@ func NSLInstalled() bool {
 // LimaInstalled reports whether the limactl binary is found on PATH or Homebrew bin.
 func LimaInstalled() bool {
 	return executable("limactl") != ""
-}
-
-// WSLInstalled reports whether the binary for the chosen backend is installed.
-func WSLInstalled(backend string) bool {
-	if backend == BackendLima {
-		return LimaInstalled()
-	}
-	return NSLInstalled()
 }
 
 func (t Tool) Supported() bool {

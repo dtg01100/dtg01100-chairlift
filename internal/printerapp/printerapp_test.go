@@ -468,6 +468,38 @@ func TestApplyOverridesRejectsBadInput(t *testing.T) {
 	}
 }
 
+func TestDigestPartExtractsDigest(t *testing.T) {
+	tests := []struct {
+		image string
+		want  string
+	}{
+		{"ghcr.io/org/repo@sha256:abcdef1234567890", "sha256:abcdef1234567890"},
+		{"ghcr.io/org/repo:v1.0.0", ""},
+		{"ghcr.io/org/repo", ""},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		if got := digestPart(tc.image); got != tc.want {
+			t.Errorf("digestPart(%q) = %q, want %q", tc.image, got, tc.want)
+		}
+	}
+}
+
+func TestDefaultUnitDirReturnsPathUnderUserConfig(t *testing.T) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Skipf("cannot determine UserConfigDir: %v", err)
+	}
+	got, err := defaultUnitDir()
+	if err != nil {
+		t.Fatalf("defaultUnitDir() error: %v", err)
+	}
+	want := filepath.Join(configDir, "containers", "systemd")
+	if got != want {
+		t.Errorf("defaultUnitDir() = %q, want %q", got, want)
+	}
+}
+
 // isSHA256Digest reports whether d is a well-formed "sha256:<64 hex>" OCI
 // manifest index digest.
 func isSHA256Digest(d string) bool {

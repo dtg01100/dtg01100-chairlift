@@ -236,7 +236,7 @@ like the other symbolic choices.
 **Files Icon** marks the Files application on GNOME or Dolphin on KDE Plasma with
 the project you actually work on. Every CNCF project that publishes artwork
 is in the list — 214 of them, Kubernetes through bootc — so the picker searches
-rather than scrolls, and each one arrives as the project's own colour icon
+rather than scrolls, and each one arrives as the project's own color icon
 straight from
 [cncf/artwork](https://github.com/cncf/artwork).
 
@@ -252,8 +252,8 @@ GNOME extension; without it the section is not shown at all rather than
 offering a control that does nothing. On GNOME, the Files mark is shared
 everywhere — the dock, the app grid, the window switcher — because GNOME keeps
 one icon per app, not one per place; Plasma's Dolphin is a separate surface.
-Only the Files icon is in colour: GNOME's top bar and app-grid glyph draw
-single-colour silhouettes, recoloured to match your theme.
+Only the Files icon is in color: GNOME's top bar and app-grid glyph draw
+single-color silhouettes, recolored to match your theme.
 
 On GNOME, turning a section off puts back exactly what was there before,
 including a mark your distribution set rather than one you chose. KDE Plasma

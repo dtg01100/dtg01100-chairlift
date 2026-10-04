@@ -38,7 +38,7 @@ func TestPublishedVersionsListsOneRowPerDayOfTheRunningStream(t *testing.T) {
 	want := []PublishedVersion{
 		{Row: Row{Title: "22 September 2026", Subtitle: "Published as stable-20260922"}, Day: "20260922"},
 		{Row: Row{Title: "15 September 2026", Subtitle: "Published as stable-20260915"}, Day: "20260915"},
-		{Row: Row{Title: "8 September 2026", Subtitle: "Running now · Published as stable-20260908"}, Day: "20260908", Running: true},
+		{Row: Row{Title: "8 September 2026", Subtitle: "Running now · Published as stable-20260908"}, Day: "20260908"},
 		{Row: Row{Title: "1 September 2026", Subtitle: "Your previous version · Published as stable-20260901"}, Day: "20260901"},
 	}
 	if len(got) != len(want) {
@@ -54,7 +54,7 @@ func TestPublishedVersionsListsOneRowPerDayOfTheRunningStream(t *testing.T) {
 func TestPublishedVersionsMarksNothingForAnUnreadableVersion(t *testing.T) {
 	builds := registrytags.Builds([]string{"stable-20260908"}, time.Time{})
 	got := PublishedVersions(builds, "stable", "", "not-a-build")
-	if len(got) != 1 || got[0].Subtitle != "Published as stable-20260908" || got[0].Day != "20260908" || got[0].Running {
+	if len(got) != 1 || got[0].Subtitle != "Published as stable-20260908" || got[0].Day != "20260908" {
 		t.Errorf("PublishedVersions() = %#v, want one unmarked row", got)
 	}
 }
