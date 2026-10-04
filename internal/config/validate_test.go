@@ -785,7 +785,11 @@ func TestParseAndValidateEveryGroupFieldAccepted(t *testing.T) {
 			t.Fatalf("no reflect.Type found for group field %q", field)
 		}
 		t.Run(field, func(t *testing.T) {
-			data := "agents_page:\n  agents_group:\n    " + field + ": " + sampleYAMLValueForType(fieldType) + "\n"
+			value := sampleYAMLValueForType(fieldType)
+			if field == "wsl_backend" {
+				value = "lima"
+			}
+			data := "agents_page:\n  agents_group:\n    " + field + ": " + value + "\n"
 			raw, loadErr := parseAndValidate(configSourceForPath(path), []byte(data))
 			if loadErr != nil {
 				t.Fatalf("parseAndValidate(%q) error = %v, want nil", data, loadErr)

@@ -173,6 +173,17 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 			required: []string{
 				"pageview.BootcRollbackRow(",
 				"pageview.BootcRollbackResultSubtitle(",
+				"pageview.UnpinRow(",
+				"pageview.UnpinConfirmation(",
+			},
+		},
+		{
+			file: "versions.go",
+			required: []string{
+				"pageview.PublishedVersionsRow(",
+				"pageview.PublishedVersionsSummary(",
+				"pageview.PublishedVersions(",
+				"pageview.PinConfirmation(",
 			},
 		},
 	}

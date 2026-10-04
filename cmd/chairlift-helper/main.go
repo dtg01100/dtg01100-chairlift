@@ -18,6 +18,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -313,6 +314,10 @@ func runDocker(ctx context.Context, invocation ubluehelper.Invocation) {
 // run executes one privileged command, forwarding its output so the calling
 // GUI can surface a real failure message instead of a bare exit code.
 func run(ctx context.Context, name string, args ...string) error {
+	full := append([]string{name}, args...)
+	if line, err := json.Marshal(full); err == nil {
+		fmt.Printf("%s%s\n", ubluehelper.HelperExecPrefix, line)
+	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

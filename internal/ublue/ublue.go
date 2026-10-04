@@ -258,6 +258,8 @@ func osUserGroups() ([]string, error) {
 	return names, nil
 }
 
+var pkexecCommand = pkexec.Command
+
 // SwitchChannel stages a switch of this host to the requested release
 // channel. Only the channel word crosses the pkexec boundary; the helper
 // resolves the image reference itself.
@@ -265,7 +267,7 @@ func SwitchChannel(ctx context.Context, channel imageinfo.Channel) error {
 	if channel != imageinfo.ChannelStable && channel != imageinfo.ChannelTesting {
 		return &Error{Message: fmt.Sprintf("unsupported channel %q", channel)}
 	}
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandChannelSwitch, string(channel))
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandChannelSwitch, string(channel))
 	return err
 }
 
@@ -277,13 +279,13 @@ func SetDeveloperMode(ctx context.Context, enabled bool) error {
 	if enabled {
 		command = ubluehelper.CommandDXEnable
 	}
-	_, _, err := runHelper(ctx, pkexec.Command, command)
+	_, _, err := runHelper(ctx, pkexecCommand, command)
 	return err
 }
 
 // EnableKVMAccess grants this account access to hardware virtualization.
 func EnableKVMAccess(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandKVMEnable)
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandKVMEnable)
 	return err
 }
 
@@ -294,14 +296,14 @@ func SetDocker(ctx context.Context, enabled bool) error {
 	if enabled {
 		command = ubluehelper.CommandDockerEnable
 	}
-	_, _, err := runHelper(ctx, pkexec.Command, command)
+	_, _, err := runHelper(ctx, pkexecCommand, command)
 	return err
 }
 
 // Restart restarts the machine. It is the only ChairLift action that ends the
 // user's session, so callers must confirm before reaching it.
 func Restart(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandRestart)
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandRestart)
 	return err
 }
 
@@ -309,7 +311,7 @@ func Restart(ctx context.Context) error {
 // does not restart the machine; Restart is a separate, separately confirmed
 // action.
 func Rollback(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandRollback)
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandRollback)
 	return err
 }
 
@@ -319,14 +321,14 @@ func Pin(ctx context.Context, day string) error {
 	if err := ubluehelper.ValidateDay(day, time.Now()); err != nil {
 		return &Error{Message: err.Error()}
 	}
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandPin, day)
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandPin, day)
 	return err
 }
 
 // Unpin stages the stream recovered from the booted dated tag. Callers must
 // confirm first; no target crosses the privilege boundary.
 func Unpin(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandUnpin)
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandUnpin)
 	return err
 }
 
@@ -336,7 +338,7 @@ func Unpin(ctx context.Context) error {
 // pageview.FactoryResetConfirmation — because there is nothing this function
 // or the privileged helper behind it can undo once bootc applies the reset.
 func FactoryReset(ctx context.Context) error {
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandFactoryReset)
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandFactoryReset)
 	return err
 }
 
@@ -346,7 +348,7 @@ func SetAutomaticUpdates(ctx context.Context, enabled bool) error {
 	if enabled {
 		command = ubluehelper.CommandAutoEnable
 	}
-	_, _, err := runHelper(ctx, pkexec.Command, command)
+	_, _, err := runHelper(ctx, pkexecCommand, command)
 	return err
 }
 
@@ -359,7 +361,7 @@ func SwitchDriver(ctx context.Context, driver imageinfo.Driver) error {
 	default:
 		return &Error{Message: fmt.Sprintf("unsupported graphics driver %q", driver)}
 	}
-	_, _, err := runHelper(ctx, pkexec.Command, ubluehelper.CommandDriverSwitch, string(driver))
+	_, _, err := runHelper(ctx, pkexecCommand, ubluehelper.CommandDriverSwitch, string(driver))
 	return err
 }
 

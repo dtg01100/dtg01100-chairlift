@@ -439,3 +439,99 @@ func waitForMarker(t *testing.T, marker string) {
 	}
 	t.Fatal("fake helper never started")
 }
+
+func TestRunCapturesDerivedCommandAndJournalsOutcome(t *testing.T) {
+	dryrun.Set(false)
+	t.Cleanup(func() { dryrun.Set(false) })
+
+	journalPath := filepath.Join(t.TempDir(), "journal.jsonl")
+	t.Setenv(journal.PathEnv, journalPath)
+	journal.Reset()
+	t.Cleanup(journal.Reset)
+
+	fakeHelper := filepath.Join(t.TempDir(), "fake-helper")
+	body := "#!/bin/sh\n" +
+		"echo 'chairlift-helper: exec [\"usermod\", \"-aG\", \"docker\", \"testuser\"]'\n" +
+		"echo 'chairlift-helper: exec [\"systemctl\", \"enable\", \"--now\", \"docker.socket\", \"docker.service\"]'\n" +
+		"echo 'normal output'\n" +
+		"exit 0\n"
+	if err := os.WriteFile(fakeHelper, []byte(body), 0o755); err != nil {
+		t.Fatalf("writing fake helper: %v", err)
+	}
+
+	stdout, stderr, err := Run(context.Background(), "/bin/sh", fakeHelper, "docker-enable")
+	if err != nil {
+		t.Fatalf("Run = %v, want nil", err)
+	}
+	if strings.Contains(stdout, "chairlift-helper: exec") {
+		t.Errorf("stdout = %q, want exec marker stripped", stdout)
+	}
+	if !strings.Contains(stdout, "normal output") {
+		t.Errorf("stdout = %q, want normal output preserved", stdout)
+	}
+	if stderr != "" {
+		t.Errorf("stderr = %q, want empty", stderr)
+	}
+
+	entries := readJournal(t, journalPath)
+	if len(entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2 (dispatch + outcome)", len(entries))
+	}
+	if entries[0].Action != "docker-enable" || entries[0].Suppressed != journal.SuppressedNone {
+		t.Errorf("entry[0] = %+v, want action docker-enable suppressed no", entries[0])
+	}
+	if entries[1].Action != "docker-enable" || entries[1].Outcome != journal.OutcomeSucceeded {
+		t.Errorf("entry[1] = %+v, want action docker-enable outcome succeeded", entries[1])
+	}
+	wantExecuted := [][]string{
+		{"usermod", "-aG", "docker", "testuser"},
+		{"systemctl", "enable", "--now", "docker.socket", "docker.service"},
+	}
+	if !reflect.DeepEqual(entries[1].Executed, wantExecuted) {
+		t.Errorf("entry[1].Executed = %v, want %v", entries[1].Executed, wantExecuted)
+	}
+}
+
+func TestRunJournalsOutcomeRefusedOnExit126(t *testing.T) {
+	dryrun.Set(false)
+	t.Cleanup(func() { dryrun.Set(false) })
+
+	journalPath := filepath.Join(t.TempDir(), "journal.jsonl")
+	t.Setenv(journal.PathEnv, journalPath)
+	journal.Reset()
+	t.Cleanup(journal.Reset)
+
+	fakeHelper := filepath.Join(t.TempDir(), "fake-helper")
+	body := "#!/bin/sh\nexit 126\n"
+	if err := os.WriteFile(fakeHelper, []byte(body), 0o755); err != nil {
+		t.Fatalf("writing fake helper: %v", err)
+	}
+
+	_, _, err := Run(context.Background(), "/bin/sh", fakeHelper, "restart")
+	if err == nil {
+		t.Fatal("Run = nil, want error on exit 126")
+	}
+
+	entries := readJournal(t, journalPath)
+	if len(entries) != 2 {
+		t.Fatalf("journal entries = %d, want 2", len(entries))
+	}
+	if entries[1].Outcome != journal.OutcomeRefused {
+		t.Errorf("entry[1].Outcome = %q, want refused", entries[1].Outcome)
+	}
+	if entries[1].ExitCode == nil || *entries[1].ExitCode != 126 {
+		t.Errorf("entry[1].ExitCode = %v, want 126", entries[1].ExitCode)
+	}
+}
+
+func TestParseAndCleanExecKeepsLinesAfterAnOverlongLine(t *testing.T) {
+	long := strings.Repeat("x", 100*1024)
+	output := long + "\nchairlift-helper: exec [\"bootc\",\"status\"]\nafter\n"
+	clean, executed := parseAndCleanExec(output, "/usr/bin/chairlift-helper")
+	if clean != long+"\nafter\n" {
+		t.Fatalf("clean output lost lines after an overlong line (len %d)", len(clean))
+	}
+	if len(executed) != 1 || executed[0][0] != "bootc" {
+		t.Fatalf("executed = %v, want one bootc command", executed)
+	}
+}

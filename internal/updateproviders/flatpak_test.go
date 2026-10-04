@@ -412,3 +412,102 @@ func TestFlatpakApplyDryRunReportsPreviewWithoutCompletedMutation(t *testing.T) 
 		t.Fatal("dry-run Apply() does not report preview")
 	}
 }
+
+func TestFlatpakApplyReconciliation(t *testing.T) {
+	listErr := errors.New("remote-ls failed")
+
+	tests := []struct {
+		name               string
+		cancelDuringUpdate bool
+		items              []updateflow.Item
+		postUpdates        []flatpak.UpdateInfo
+		listErr            error
+		wantChanged        bool
+		wantErr            error
+	}{
+		{
+			name: "all applied cleared",
+			items: []updateflow.Item{
+				{ID: "org.mozilla.firefox", Name: "Firefox", Scope: "user"},
+			},
+			postUpdates: nil,
+			wantChanged: true,
+		},
+		{
+			name: "new update appeared after check but applied ones cleared",
+			items: []updateflow.Item{
+				{ID: "org.mozilla.firefox", Name: "Firefox", Scope: "user"},
+			},
+			postUpdates: []flatpak.UpdateInfo{
+				{ApplicationID: "org.videolan.VLC", Name: "VLC", Installation: "user"},
+			},
+			wantChanged: true,
+		},
+		{
+			name: "applied ref still listed",
+			items: []updateflow.Item{
+				{ID: "org.mozilla.firefox", Name: "Firefox", Scope: "user"},
+			},
+			postUpdates: []flatpak.UpdateInfo{
+				{ApplicationID: "org.mozilla.firefox", Name: "Firefox", Installation: "user"},
+			},
+			wantChanged: false,
+		},
+		{
+			name: "listing error",
+			items: []updateflow.Item{
+				{ID: "org.mozilla.firefox", Name: "Firefox", Scope: "user"},
+			},
+			listErr:     listErr,
+			wantChanged: false,
+			wantErr:     listErr,
+		},
+		{
+			name:               "ctx cancelled",
+			cancelDuringUpdate: true,
+			items: []updateflow.Item{
+				{ID: "org.mozilla.firefox", Name: "Firefox", Scope: "user"},
+			},
+			wantChanged: false,
+			wantErr:     context.Canceled,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			provider := newFlatpak(FlatpakDeps{
+				Installed: func() bool { return true },
+				Update: func(ctx context.Context, _ string, _ bool) error {
+					if test.cancelDuringUpdate {
+						cancel()
+					}
+					return nil
+				},
+				ListUpdates: func(ctx context.Context, _ bool) ([]flatpak.UpdateInfo, error) {
+					if err := ctx.Err(); err != nil {
+						return nil, err
+					}
+					if test.listErr != nil {
+						return nil, test.listErr
+					}
+					return test.postUpdates, nil
+				},
+			})
+
+			result, err := provider.Apply(ctx, test.items, nil)
+			if test.wantErr != nil {
+				if !errors.Is(err, test.wantErr) {
+					t.Fatalf("Apply() error = %v, want error wrapping %v", err, test.wantErr)
+				}
+			} else if err != nil {
+				t.Fatalf("Apply() unexpected error: %v", err)
+			}
+			if result.Changed != test.wantChanged {
+				t.Fatalf("Apply() Changed = %v, want %v", result.Changed, test.wantChanged)
+			}
+		})
+	}
+}

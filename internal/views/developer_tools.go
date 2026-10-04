@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
+	"codeberg.org/puregotk/puregotk/v4/gobject"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 	sgtk "github.com/frostyard/snowkit/gtk"
 	"github.com/projectbluefin/chairlift/internal/capability"
@@ -32,8 +33,15 @@ type developerOptionRow struct {
 }
 
 func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ublue.Status) {
+	if groupConfig := uh.config.GetGroupConfig("features_page", "dx_group"); groupConfig != nil {
+		uh.wslBackend = groupConfig.WSLBackend
+	}
+	if uh.wslBackend == "" {
+		uh.wslBackend = devtools.BackendNSL
+	}
+
 	for _, choice := range []struct{ kind, title, subtitle string }{
-		{"wsl", "WSL Mode", "Ubuntu LTS in a Lima virtual machine for project development. Your home is shared writable; the first download is about 600 MB."},
+		{"wsl", "WSL Mode", "Persistent Linux machines with nsl inside lightweight systemd-vmspawn virtual machines. Runs as your user without host daemons."},
 		{"docker", "Enable Docker", "Docker CLI, Compose, LazyDocker and Dive, with the base image's daemon. Requires administrator authentication; Docker access grants root-equivalent control."},
 	} {
 		item := &developerOptionRow{kind: choice.kind, row: adw.NewActionRow(), spinner: newActivitySpinner()}
@@ -46,6 +54,38 @@ func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ub
 		item.row.SetActivatableWidget(&item.toggle.widget.Widget)
 		group.Add(&item.row.Widget)
 		uh.developerOptions = append(uh.developerOptions, item)
+
+		if choice.kind == "wsl" {
+			combo := adw.NewComboRow()
+			combo.SetTitle("WSL Backend")
+			combo.SetSubtitle("Choose nsl (default) or Lima for virtual machines. An existing Lima machine selects Lima.")
+			combo.SetModel(gtk.NewStringList([]string{"nsl (default)", "Lima"}))
+			uh.wslSuppress = true
+			if uh.wslBackend == devtools.BackendLima {
+				combo.SetSelected(1)
+			} else {
+				combo.SetSelected(0)
+			}
+			uh.wslSuppress = false
+			uh.wslCombo = combo
+			uh.wslBackendNotify = func(_ gobject.Object, _ uintptr) {
+				if uh.wslSuppress {
+					return
+				}
+				selected := combo.GetSelected()
+				target := devtools.BackendNSL
+				if selected == 1 {
+					target = devtools.BackendLima
+				}
+				if target == uh.wslBackend {
+					return
+				}
+				uh.wslBackend = target
+				uh.refreshDeveloperOptions(status)
+			}
+			combo.ConnectNotify(&uh.wslBackendNotify)
+			group.Add(&combo.Widget)
+		}
 	}
 	editors := adw.NewExpanderRow()
 	editors.SetTitle("IDEs and terminal editors")
@@ -66,36 +106,118 @@ func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ub
 	// Initial reads share the action gate too; an older load cannot overwrite
 	// a user's mutation or enable overlapping developer actions.
 	uh.developerSwitch.SetSensitive(false)
+	uh.refreshDeveloperOptions(status)
+}
+
+func (uh *UserHome) refreshDeveloperOptions(status ublue.Status) {
 	if !uh.developerGate.TryStart() {
 		return
 	}
+	uh.setDeveloperSensitive(false)
+	backend := uh.wslBackend
+	resolve := !uh.wslBackendResolved
 	go func() {
 		ctx, cancel := ublue.DefaultContext()
 		defer cancel()
-		wsl, wslErr := devtools.WSLStatus(ctx)
+		var wsl devtools.WSLState
+		var wslErr error
+		var doctorOutput string
+		var doctorErr error
+		if backend == devtools.BackendNSL && resolve {
+			// The backend choice is not stored: an existing Lima machine with
+			// no nsl machine means the user chose Lima, so the first read
+			// follows it instead of resetting to the default.
+			nsl, nslErr := devtools.NSLStatus(ctx)
+			lima, limaErr := devtools.LimaStatus(ctx)
+			backend = devtools.ResolveBackend(backend, nslErr == nil && nsl.Exists, limaErr == nil && lima.Exists)
+		}
+		if backend == devtools.BackendLima {
+			wsl, wslErr = devtools.LimaStatus(ctx)
+		} else {
+			wsl, wslErr = devtools.NSLStatus(ctx)
+			if devtools.NSLInstalled() {
+				doctorOutput, doctorErr = devtools.NSLDoctor(ctx)
+			}
+		}
 		docker, dockerErr := devtools.DockerStatus(ctx)
 		kvmExists, kvmAccess := devtools.KVMAvailable()
 		formulae, formulaErr := homebrew.ListInstalledFormulae()
 		casks, caskErr := homebrew.ListInstalledCasks()
 		sgtk.RunOnMainThread(func() {
 			defer uh.developerGate.Reset()
+			if resolve {
+				uh.wslBackendResolved = true
+				if backend != uh.wslBackend {
+					uh.wslBackend = backend
+					if uh.wslCombo != nil {
+						uh.wslSuppress = true
+						uh.wslCombo.SetSelected(1)
+						uh.wslSuppress = false
+					}
+				}
+			}
 			brew := uh.capabilities[capability.Homebrew]
 			for _, item := range uh.developerOptions {
 				switch item.kind {
 				case "wsl":
 					item.active = wsl.Running
-					item.canEnable = devtools.HostSupported() && brew && kvmExists && (kvmAccess || status.Supports(ubluehelper.CommandKVMEnable))
-					item.allowed = wslErr == nil && (wsl.Running || item.canEnable)
-					item.toggle.set(item.active)
-					item.row.SetSubtitle(wslSubtitle(wsl, wslErr))
-					if !wsl.Running && !devtools.HostSupported() {
-						item.row.SetSubtitle("WSL Mode requires a Linux x86_64 or ARM64 host.")
-					} else if !wsl.Running && !brew {
-						item.row.SetSubtitle("Needs Homebrew to install Lima.")
-					} else if !wsl.Running && !kvmExists {
-						item.row.SetSubtitle("Needs hardware virtualization: /dev/kvm is missing. Enable virtualization in firmware.")
-					} else if !wsl.Running && !kvmAccess {
-						item.row.SetSubtitle("Needs hardware virtualization access. Enabling requests administrator authentication, then a new login before setup can continue.")
+					if backend == devtools.BackendLima {
+						item.canEnable = devtools.HostSupported() && brew && kvmExists && (kvmAccess || status.Supports(ubluehelper.CommandKVMEnable))
+						item.allowed = wslErr == nil && (wsl.Running || item.canEnable)
+						item.toggle.set(item.active)
+						item.row.SetSubtitle(wslSubtitle(backend, wsl, wslErr))
+						if !wsl.Running && !devtools.HostSupported() {
+							item.row.SetSubtitle("WSL Mode requires a Linux x86_64 or ARM64 host.")
+						} else if !wsl.Running && !brew {
+							item.row.SetSubtitle("Needs Homebrew to install Lima.")
+						} else if !wsl.Running && !kvmExists {
+							item.row.SetSubtitle("Needs hardware virtualization: /dev/kvm is missing. Enable virtualization in firmware.")
+						} else if !wsl.Running && !kvmAccess {
+							item.row.SetSubtitle("Needs hardware virtualization access. Enabling requests administrator authentication, then a new login before setup can continue.")
+						}
+					} else {
+						// nsl backend
+						nslInstalled := devtools.NSLInstalled()
+						nslHostOk := devtools.NSLHostSupported()
+						actionable, isKVM := devtools.ParseNSLDoctor(doctorOutput)
+
+						if wsl.Running {
+							// Stopping a running machine needs no prerequisite.
+							item.canEnable = nslHostOk && nslInstalled
+							item.allowed = wslErr == nil
+							item.toggle.set(item.active)
+							item.row.SetSubtitle(wslSubtitle(backend, wsl, wslErr))
+						} else if !nslHostOk {
+							item.canEnable = false
+							item.allowed = false
+							item.toggle.set(item.active)
+							item.row.SetSubtitle("WSL Mode with nsl requires a Linux x86_64 host.")
+						} else if !brew && !nslInstalled {
+							item.canEnable = false
+							item.allowed = false
+							item.toggle.set(item.active)
+							item.row.SetSubtitle("Needs Homebrew to install nsl.")
+						} else if !kvmExists {
+							item.canEnable = false
+							item.allowed = false
+							item.toggle.set(item.active)
+							item.row.SetSubtitle("Needs hardware virtualization: /dev/kvm is missing. Enable virtualization in firmware.")
+						} else if nslInstalled && doctorErr != nil && !isKVM && actionable != "" {
+							item.canEnable = false
+							item.allowed = false
+							item.toggle.set(item.active)
+							item.row.SetSubtitle(actionable)
+						} else if !kvmAccess {
+							item.canEnable = status.Supports(ubluehelper.CommandKVMEnable)
+							item.allowed = item.canEnable
+							item.toggle.set(item.active)
+							item.row.SetSubtitle("Needs hardware virtualization access. Enabling requests administrator authentication, then a new login before setup can continue.")
+						} else {
+							item.canEnable = true
+							item.allowed = wslErr == nil && (wsl.Running || item.canEnable)
+							item.toggle.set(item.active)
+							item.row.SetSubtitle(wslSubtitle(backend, wsl, wslErr))
+						}
 					}
 				case "docker":
 					item.active = docker.Active
@@ -151,6 +273,9 @@ func (uh *UserHome) setDeveloperSensitive(sensitive bool) {
 	if uh.developerSwitch != nil {
 		uh.developerSwitch.SetSensitive(sensitive && uh.developerCanToggle)
 	}
+	if uh.wslCombo != nil {
+		uh.wslCombo.SetSensitive(sensitive)
+	}
 	for _, item := range uh.developerOptions {
 		if item.toggle != nil {
 			item.toggle.widget.SetSensitive(sensitive && item.allowed)
@@ -161,18 +286,32 @@ func (uh *UserHome) setDeveloperSensitive(sensitive bool) {
 	}
 }
 
-func wslSubtitle(state devtools.WSLState, err error) string {
+func wslSubtitle(backend string, state devtools.WSLState, err error) string {
+	if backend == devtools.BackendLima {
+		switch {
+		case err != nil:
+			return "Could not read the Ubuntu virtual machine's state."
+		case state.Ready:
+			return "Ubuntu is ready. Connect Remote SSH to lima-ubuntu; your home is shared writable. Install the Remote - SSH extension in your editor."
+		case state.Running:
+			return "Ubuntu is running, but its shell is not ready. Turn off to stop it without deleting data."
+		case state.Exists:
+			return "Ubuntu is stopped. Its disk and your files are kept; enabling starts it and autostart again."
+		default:
+			return "Create Ubuntu LTS with Lima, share your home writable and start it at login. First download: about 600 MB."
+		}
+	}
 	switch {
 	case err != nil:
-		return "Could not read the Ubuntu virtual machine's state."
+		return "Could not read nsl machine state."
 	case state.Ready:
-		return "Ubuntu is ready. Connect Remote SSH to lima-ubuntu; your home is shared writable. Install the Remote - SSH extension in your editor."
+		return "nsl is ready. Persistent Linux machines run as systemd-nspawn containers inside a lightweight VM."
 	case state.Running:
-		return "Ubuntu is running, but its shell is not ready. Turn off to stop it without deleting data."
+		return "nsl is running, but its shell is not ready. Turn off to stop it without deleting data."
 	case state.Exists:
-		return "Ubuntu is stopped. Its disk and your files are kept; enabling starts it and autostart again."
+		return "nsl is stopped. Machines and disks are kept; enabling starts the default machine again."
 	default:
-		return "Create Ubuntu LTS with Lima, share your home writable and start it at login. First download: about 600 MB."
+		return "Persistent Linux machines with nsl via systemd-vmspawn and QEMU/KVM. Runs as your user without host daemons."
 	}
 }
 
@@ -203,6 +342,7 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 		item.button.SetLabel("Installing…")
 	}
 	title := item.row.GetTitle()
+	backend := uh.wslBackend
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -214,8 +354,8 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 		var packages []homebrew.Package
 		switch item.kind {
 		case "wsl":
-			err = devtools.SetWSL(ctx, enabled, progress)
-			wsl, stateErr = devtools.WSLStatus(ctx)
+			err = devtools.SetWSL(ctx, backend, enabled, progress)
+			wsl, stateErr = devtools.WSLStatus(ctx, backend)
 		case "docker":
 			err = devtools.SetDocker(ctx, enabled, progress)
 			docker, stateErr = devtools.DockerStatus(ctx)
@@ -256,7 +396,7 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 						item.allowed = item.active || item.canEnable
 					}
 					item.toggle.set(item.active)
-					item.row.SetSubtitle(wslSubtitle(wsl, stateErr))
+					item.row.SetSubtitle(wslSubtitle(uh.wslBackend, wsl, stateErr))
 				case "docker":
 					if stateErr == nil {
 						item.active = docker.Active

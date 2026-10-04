@@ -1,17 +1,15 @@
 # Destination and action ownership matrix
 
-## Overview
+## Status: superseded proposal
 
-This is the source inventory and relocation contract for
-[#344](https://github.com/projectbluefin/chairlift/issues/344), parcel 3 of
-[#241](https://github.com/projectbluefin/chairlift/issues/241), under
-[#233](https://github.com/projectbluefin/chairlift/issues/233).
-The target organization below is proposed implementation work, **not the current
-sidebar or an accepted ADR**. The current seven primary pages remain usable
-until [#201](https://github.com/projectbluefin/chairlift/issues/201) performs
-the explicit cutover. The [architecture overview](overview.md#pages) describes
-those current mounts. No configuration keys, providers, or privileges change
-with this inventory.
+This file records the original inventory and proposed five-section relocation
+from #241/#344. The maintainer closed #201 as **superseded** on 2026-09-28:
+the application keeps seven primary routes (Updates, Apps, Agents, Features,
+Livery, Maintenance, Help) under `internal/navigation`. The destination map
+and counts below are historical planning evidence, **not** a current or future
+implementation contract. Current group keys and mounts must be read from
+`internal/config`, `internal/navigation`, and the view builders; do not copy
+this table into new issue acceptance or a user-facing walkthrough.
 
 ## Design
 
@@ -176,7 +174,9 @@ are not new routes. A target route never creates a second copy of the owner.
 | S3 | Enable/disable distribution feature | System / Distribution features | `onFeatureToggled` | `internal/updex` fixed helper |
 | S4 | Check/update distribution features | System / Distribution features | `onUpdateFeaturesClicked` (reads via `checkFeatureUpdates`) | `internal/updex`; U1's system-components source uses same provider |
 | S5 | Roll Back to previous deployment | System / Recovery | `onBootcRollbackClicked` | `ublue.Rollback`; existing target only, completes gate after live success, no restart |
-| S6 | Check/Check Again published versions; expand list | System / Recovery | `onPublishedVersionsClicked` | `internal/registrytags.Catalog`; read-only, no pin/switch action |
+| S6 | Check/Check Again published versions; expand list | System / Recovery | `onPublishedVersionsClicked` | `internal/registrytags.Catalog`; lists dated builds of the running stream |
+| S6a | Pin to a published dated build | System / Recovery | `confirmPin` / `runPin` | `ublue.Pin`; fixed helper, validated day word only, confirmed via dialog |
+| S6b | Return to stream (unpin) | System / Recovery | `confirmReturnToStream` / `runReturnToStream` | `ublue.Unpin`; fixed helper, offered when booted on dated tag, confirmed via dialog |
 | S7 | Free up space; post-update cleanup | System / Storage (also composed by U1) | `internal/updateproviders` cleanup runner | Typed cleanup steps; manual presentation via `onFreeUpSpaceClicked`, never configured scripts |
 | S8 | Execute each configured `actions[]` entry, including default Clean Up Boot Old Entries | System / Administrator maintenance | `runMaintenanceAction` | `pageview.MaintenanceCommand` → `internal/maintenanceexec`; existing trusted-config sudo rules, five-minute timeout |
 | S9 | Confirm Powerwash | System / Recovery | `onPowerwashClicked` | `internal/powerwash`; user-scope reset, opt-in `reset_group` |
@@ -192,8 +192,8 @@ run share `UpdateShell.beginMutation`; no separate provider-list state or badge
 counter remains. All external work stays off GTK, with results marshalled back
 before touching controls or starting a new coordinator check.
 
-Livery orders Foundational Livery, Dock Livery, Profile picture, then App Grid
-Livery. Foundations use an embedded, theme-adaptive FlowBox preview grid with
+Livery orders Profile Picture, App Launcher Icon, Top Bar Icon, then Files
+Icon. Foundations use an embedded, theme-adaptive FlowBox preview grid with
 one activation signal. The shared catalog chooser renders at most twelve
 search matches plus Custom SVG; artwork is fetched sequentially through the
 existing livery fetch seams only for those matches. New searches cancel old

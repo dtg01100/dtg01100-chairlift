@@ -47,6 +47,14 @@ func PublishedVersionsSummary(count int, stream string) string {
 	}
 }
 
+// PublishedVersion is one published build of a stream shown in the Recovery
+// page's Published versions list.
+type PublishedVersion struct {
+	Row
+	Day     string
+	Running bool
+}
+
 // PublishedVersions returns one row per day the registry lists a build of
 // stream, newest first. builds must be registrytags.Builds output (already
 // newest first); aliases of other streams are dropped, and several tags of
@@ -56,11 +64,11 @@ func PublishedVersionsSummary(count int, stream string) string {
 // rollback deployments ("44.20260908"); either may be empty. A day matching
 // one of them is marked, so the list says where the machine is and where
 // Roll Back would take it.
-func PublishedVersions(builds []registrytags.Build, stream, running, previous string) []Row {
+func PublishedVersions(builds []registrytags.Build, stream, running, previous string) []PublishedVersion {
 	runningDay, hasRunning := versionDay(running)
 	previousDay, hasPrevious := versionDay(previous)
 
-	rows := make([]Row, 0, len(builds))
+	rows := make([]PublishedVersion, 0, len(builds))
 	var lastDay time.Time
 	for _, build := range builds {
 		if build.Stream != stream || build.Date.Equal(lastDay) {
@@ -69,20 +77,65 @@ func PublishedVersions(builds []registrytags.Build, stream, running, previous st
 		lastDay = build.Date
 
 		subtitle := "Published as " + build.Tag
+		runningNow := hasRunning && build.Date.Equal(runningDay)
 		switch {
-		case hasRunning && build.Date.Equal(runningDay):
+		case runningNow:
 			subtitle = "Running now · " + subtitle
 		case hasPrevious && build.Date.Equal(previousDay):
 			subtitle = "Your previous version · " + subtitle
 		}
-		rows = append(rows, Row{
-			// The date is a calendar day named by the tag, not an instant,
-			// so it is formatted as-is rather than shifted into local time.
-			Title:    build.Date.Format("2 January 2006"),
-			Subtitle: subtitle,
+		rows = append(rows, PublishedVersion{
+			Row: Row{
+				// The date is a calendar day named by the tag, not an instant,
+				// so it is formatted as-is rather than shifted into local time.
+				Title:    build.Date.Format("2 January 2006"),
+				Subtitle: subtitle,
+			},
+			Day:     build.Date.Format("20060102"),
+			Running: runningNow,
 		})
 	}
 	return rows
+}
+
+// PinConfirmation returns the title and body of the confirmation dialog shown
+// before pinning to a published dated build.
+func PinConfirmation(date string) (title, body string) {
+	title = fmt.Sprintf("Pin to %s?", date)
+	body = fmt.Sprintf("This stages a switch to the build from %s. Automatic updates will stay at this version until you return to the stream. The change applies the next time you restart.", date)
+	return title, body
+}
+
+// UnpinConfirmation returns the title and body of the confirmation dialog
+// shown before returning to the regular release stream.
+func UnpinConfirmation(stream string) (title, body string) {
+	title = "Return to Stream?"
+	body = fmt.Sprintf("This stages a switch back to regular updates on the %s stream. The change applies the next time you restart.", stream)
+	return title, body
+}
+
+// UnpinRow returns the title and subtitle for the Return to stream row.
+func UnpinRow(stream string, supported bool) Row {
+	subtitle := fmt.Sprintf("Switch back to the latest updates on the %s stream", stream)
+	if !supported {
+		subtitle = "Returning to the stream is not supported on this system"
+	}
+	return Row{
+		Title:    "Return to stream",
+		Subtitle: subtitle,
+	}
+}
+
+// PinUnsupportedExplanation returns the explanation when pinning is not
+// supported by the system image.
+func PinUnsupportedExplanation() string {
+	return "Pinning is not supported on this system"
+}
+
+// UnpinUnsupportedExplanation returns the explanation when returning to the
+// stream is not supported by the system image.
+func UnpinUnsupportedExplanation() string {
+	return "Returning to the stream is not supported on this system"
 }
 
 // versionDay reads the build day out of a bootc image version. Bluefin's

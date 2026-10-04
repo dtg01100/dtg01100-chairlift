@@ -630,3 +630,43 @@ func TestRepoConfigYmlLoadsCleanlyUnderStrictValidation(t *testing.T) {
 		t.Fatalf("loadFromPath(%q): returned nil config without error", path)
 	}
 }
+
+func TestWSLBackendDefaultAndOverride(t *testing.T) {
+	def := defaultConfig()
+	if def.FeaturesPage["dx_group"].WSLBackend != "nsl" {
+		t.Fatalf("default dx_group.WSLBackend = %q, want %q", def.FeaturesPage["dx_group"].WSLBackend, "nsl")
+	}
+
+	t.Run("override to lima", func(t *testing.T) {
+		path := writeConfigFile(t, "features_page:\n  dx_group:\n    wsl_backend: lima\n")
+		cfg, err := loadFromPath(path)
+		if err != nil {
+			t.Fatalf("loadFromPath(%q): %v", path, err)
+		}
+		if got := cfg.FeaturesPage["dx_group"].WSLBackend; got != "lima" {
+			t.Errorf("dx_group.WSLBackend = %q, want %q", got, "lima")
+		}
+	})
+
+	t.Run("explicit nsl", func(t *testing.T) {
+		path := writeConfigFile(t, "features_page:\n  dx_group:\n    wsl_backend: nsl\n")
+		cfg, err := loadFromPath(path)
+		if err != nil {
+			t.Fatalf("loadFromPath(%q): %v", path, err)
+		}
+		if got := cfg.FeaturesPage["dx_group"].WSLBackend; got != "nsl" {
+			t.Errorf("dx_group.WSLBackend = %q, want %q", got, "nsl")
+		}
+	})
+}
+
+func TestWSLBackendRejectsUnknownValue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(path, []byte("features_page:\n  dx_group:\n    enabled: true\n    wsl_backend: lmia\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, loadErr := loadFromPath(path); loadErr == nil {
+		t.Fatal("wsl_backend \"lmia\" loaded without error")
+	}
+}

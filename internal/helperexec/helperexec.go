@@ -47,6 +47,7 @@ package helperexec
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -58,6 +59,7 @@ import (
 
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/journal"
+	"github.com/projectbluefin/chairlift/internal/ubluehelper"
 )
 
 // WaitDelay bounds how long Run waits for the pkexec command's output pipes
@@ -152,12 +154,23 @@ func Run(ctx context.Context, pkexecPath, helperPath string, args ...string) (st
 
 	err := cmd.Run()
 
-	if stderr.Len() > 0 {
-		log.Printf("%s stderr: %s", path.Base(helperPath), stderr.String())
+	cleanStdout, execOut := parseAndCleanExec(stdout.String(), helperPath)
+	cleanStderr, execErr := parseAndCleanExec(stderr.String(), helperPath)
+	var executed [][]string
+	if len(execOut) > 0 {
+		executed = append(executed, execOut...)
+	}
+	if len(execErr) > 0 {
+		executed = append(executed, execErr...)
+	}
+
+	if len(cleanStderr) > 0 {
+		log.Printf("%s stderr: %s", path.Base(helperPath), cleanStderr)
 	}
 
 	if err == nil {
-		return stdout.String(), stderr.String(), nil
+		journal.RecordOutcome(action, journal.OutcomeSucceeded, nil, executed)
+		return cleanStdout, cleanStderr, nil
 	}
 
 	// The helper's own exit status is authoritative whenever it exited on its
@@ -178,18 +191,63 @@ func Run(ctx context.Context, pkexecPath, helperPath string, args ...string) (st
 				log.Printf("%s exited 0 but a descendant still held its output pipes; captured output may be truncated",
 					path.Base(helperPath))
 			}
-			return stdout.String(), stderr.String(), nil
+			journal.RecordOutcome(action, journal.OutcomeSucceeded, nil, executed)
+			return cleanStdout, cleanStderr, nil
 		}
-		return "", stderr.String(), exitFailure(cmd.ProcessState.ExitCode(), stderr.String(), err)
+		exitCode := cmd.ProcessState.ExitCode()
+		if exitCode == 126 || exitCode == 127 {
+			journal.RecordOutcome(action, journal.OutcomeRefused, &exitCode, executed)
+		} else {
+			journal.RecordOutcome(action, journal.OutcomeFailed, &exitCode, executed)
+		}
+		return "", cleanStderr, exitFailure(exitCode, cleanStderr, err)
 	}
 
 	// The helper was killed rather than exiting, so a non-nil ctx error is the
 	// reason it died and names the outcome better than "signal: killed".
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return "", stderr.String(), contextError(ctxErr)
+		if errors.Is(ctxErr, context.DeadlineExceeded) {
+			journal.RecordOutcome(action, journal.OutcomeTimedOut, nil, executed)
+		} else {
+			journal.RecordOutcome(action, journal.OutcomeCancelled, nil, executed)
+		}
+		return "", cleanStderr, contextError(ctxErr)
 	}
 
-	return "", stderr.String(), classifyFailure(err, helperPath, stderr.String())
+	journal.RecordOutcome(action, journal.OutcomeFailed, nil, executed)
+	return "", cleanStderr, classifyFailure(err, helperPath, cleanStderr)
+}
+
+// parseAndCleanExec extracts any machine-readable command emitted by the helper
+// and strips those marker lines from the human-readable output.
+func parseAndCleanExec(output, helperPath string) (string, [][]string) {
+	if !strings.Contains(output, ": exec ") {
+		return output, nil
+	}
+	prefix := path.Base(helperPath) + ": exec "
+	var executed [][]string
+	var cleanLines []string
+	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
+		if strings.HasPrefix(line, prefix) || strings.HasPrefix(line, ubluehelper.HelperExecPrefix) {
+			idx := strings.Index(line, ": exec ")
+			if idx != -1 {
+				jsonPart := line[idx+len(": exec "):]
+				var cmd []string
+				if err := json.Unmarshal([]byte(jsonPart), &cmd); err == nil && len(cmd) > 0 {
+					executed = append(executed, cmd)
+				}
+			}
+			continue
+		}
+		cleanLines = append(cleanLines, line)
+	}
+	cleanOutput := strings.Join(cleanLines, "\n")
+	if len(cleanLines) > 0 && strings.HasSuffix(output, "\n") {
+		cleanOutput += "\n"
+	} else if len(cleanLines) == 0 && !strings.HasSuffix(output, "\n") {
+		cleanOutput = ""
+	}
+	return cleanOutput, executed
 }
 
 // exitFailure reports a helper that ran and exited non-zero, keeping the exit

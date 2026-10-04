@@ -16,13 +16,12 @@ import (
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 )
 
-// buildLiveryPage builds the Livery page.
+// buildLiveryPage keeps one Livery primary with independent policy groups.
+// Profile Picture is followed by the three icon surfaces; Wallpapers joins
+// only after #200 supplies working controls for its separate group.
 //
-// Foundation and Files marks come first; the personal app-grid mark comes last.
-//
-// Every control starts insensitive. Reading the current state means calling
-// `gsettings`, which is a subprocess and must not run on the GTK main thread,
-// so the page is drawn first and populated by refreshLiveryState.
+// Every control starts insensitive. Reading current state calls gsettings
+// off the GTK main thread, so refreshLiveryState populates the built page.
 func (uh *UserHome) buildLiveryPage() {
 	page := uh.liveryPrefsPage
 	if page == nil {
@@ -30,25 +29,24 @@ func (uh *UserHome) buildLiveryPage() {
 	}
 	page.SetDescription(pageview.LiveryPageDescription)
 
-	if uh.groupEnabled("livery_page", "livery_foundation_group") {
-		uh.buildLiveryPanelGroup(page)
-	}
-	if uh.groupEnabled("livery_page", "livery_dock_group") {
-		uh.buildLiveryDockGroup(page)
-	}
 	if uh.groupEnabled("livery_page", "account_group") {
 		uh.buildAccountGroup(page)
 	}
 	if uh.groupEnabled("livery_page", "livery_app_grid_group") {
 		uh.buildLiveryAppGridGroup(page)
 	}
+	if uh.groupEnabled("livery_page", "livery_foundation_group") {
+		uh.buildLiveryPanelGroup(page)
+	}
+	if uh.groupEnabled("livery_page", "livery_dock_group") {
+		uh.buildLiveryDockGroup(page)
+	}
 
 	go uh.refreshLiveryState()
 }
 
-// buildLiveryAppGridGroup builds "who you are": a brand mark fetched from
-// simpleicons.org, or the user's own SVG. It has no rotation switch —
-// a personal mark that changed on its own would stop being personal.
+// buildLiveryAppGridGroup controls the Show Applications or Kickoff icon.
+// A personal mark does not rotate; it is selected explicitly and stays put.
 func (uh *UserHome) buildLiveryAppGridGroup(page *adw.PreferencesPage) {
 	group := adw.NewPreferencesGroup()
 	group.SetTitle(pageview.LiveryAppGridTitle)
@@ -85,8 +83,8 @@ func (uh *UserHome) buildLiveryAppGridGroup(page *adw.PreferencesPage) {
 
 }
 
-// buildLiveryPanelGroup builds "who you stand with": a foundation mark in the
-// top bar, optionally advancing at each login.
+// buildLiveryPanelGroup controls GNOME's top-bar menu icon, optionally
+// advancing its foundation mark at login.
 func (uh *UserHome) buildLiveryPanelGroup(page *adw.PreferencesPage) {
 	group := adw.NewPreferencesGroup()
 	group.SetTitle(pageview.LiveryPanelTitle)
@@ -126,7 +124,7 @@ func (uh *UserHome) buildLiveryPanelGroup(page *adw.PreferencesPage) {
 
 }
 
-// buildLiveryDockGroup builds "what you roll with": the Files mark.
+// buildLiveryDockGroup controls the Files application icon across the desktop.
 func (uh *UserHome) buildLiveryDockGroup(page *adw.PreferencesPage) {
 	group := adw.NewPreferencesGroup()
 	group.SetTitle(pageview.LiveryDockTitle)

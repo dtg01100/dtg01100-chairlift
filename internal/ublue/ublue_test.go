@@ -81,6 +81,22 @@ func TestRunHelperPassesFixedHelperPathAndCommandOnly(t *testing.T) {
 			},
 			want: []string{HelperPath, "dx-disable"},
 		},
+		{
+			name: "pin dated build",
+			call: func(ctx context.Context, pkexec string) error {
+				_, _, err := runHelper(ctx, pkexec, ubluehelper.CommandPin, "20240229")
+				return err
+			},
+			want: []string{HelperPath, "pin", "20240229"},
+		},
+		{
+			name: "unpin",
+			call: func(ctx context.Context, pkexec string) error {
+				_, _, err := runHelper(ctx, pkexec, ubluehelper.CommandUnpin)
+				return err
+			},
+			want: []string{HelperPath, "unpin"},
+		},
 	}
 
 	for _, test := range tests {
@@ -571,8 +587,8 @@ func TestRunHelperJournalsEveryInvocation(t *testing.T) {
 	}
 
 	entries := readJournal(t, path)
-	if len(entries) != 1 {
-		t.Fatalf("journal has %d entries, want 1", len(entries))
+	if len(entries) != 2 {
+		t.Fatalf("journal has %d entries, want 2 (dispatch and outcome)", len(entries))
 	}
 	entry := entries[0]
 	if entry.Action != ubluehelper.CommandChannelSwitch {
@@ -584,6 +600,10 @@ func TestRunHelperJournalsEveryInvocation(t *testing.T) {
 	wantArgv := []string{pkexec, HelperPath, ubluehelper.CommandChannelSwitch, "testing"}
 	if !reflect.DeepEqual(entry.WouldRun, wantArgv) {
 		t.Errorf("journalled WouldRun = %v, want %v", entry.WouldRun, wantArgv)
+	}
+	outcome := entries[1]
+	if outcome.Action != ubluehelper.CommandChannelSwitch || outcome.Outcome != journal.OutcomeSucceeded {
+		t.Errorf("outcome = %+v, want action channel-switch outcome succeeded", outcome)
 	}
 }
 
@@ -636,4 +656,50 @@ func readJournal(t *testing.T, path string) []journal.Entry {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func TestPinAndUnpinWrappersExecutePkexec(t *testing.T) {
+	captured := filepath.Join(t.TempDir(), "captured-args")
+	fake := writeFakePkexec(t, captured)
+	oldPkexec := pkexecCommand
+	pkexecCommand = fake
+	t.Cleanup(func() { pkexecCommand = oldPkexec })
+
+	t.Run("Pin executes fake pkexec with validated day", func(t *testing.T) {
+		if err := Pin(context.Background(), "20240229"); err != nil {
+			t.Fatalf("Pin error = %v, want nil", err)
+		}
+		got := readCapturedArgs(t, captured)
+		want := []string{HelperPath, "pin", "20240229"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Pin argv = %v, want %v", got, want)
+		}
+		for _, arg := range got[1:] {
+			if strings.Contains(arg, "/") {
+				t.Errorf("Pin passed an argument carrying a slash: %q", arg)
+			}
+		}
+	})
+
+	t.Run("Pin rejects invalid day before executing pkexec", func(t *testing.T) {
+		if err := Pin(context.Background(), "not-a-day"); err == nil {
+			t.Fatal("Pin(\"not-a-day\") error = nil, want validation error")
+		}
+	})
+
+	t.Run("Unpin executes fake pkexec", func(t *testing.T) {
+		if err := Unpin(context.Background()); err != nil {
+			t.Fatalf("Unpin error = %v, want nil", err)
+		}
+		got := readCapturedArgs(t, captured)
+		want := []string{HelperPath, "unpin"}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("Unpin argv = %v, want %v", got, want)
+		}
+		for _, arg := range got[1:] {
+			if strings.Contains(arg, "/") {
+				t.Errorf("Unpin passed an argument carrying a slash: %q", arg)
+			}
+		}
+	})
 }

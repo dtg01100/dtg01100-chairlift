@@ -35,6 +35,7 @@ internal/views/                 Page builders and event handlers (one file per p
         ├── internal/navigation/ Canonical route inventory (primaries and details), shortcuts, and pure navigation transitions
         ├── internal/capability/ What this host can back a page or group with, from non-blocking probes
         ├── internal/launcher/ Pure-Go async launcher start/wait helper for GTK callers
+        ├── internal/legacydesktop/ Asynchronous startup cleanup of obsolete frostyard desktop launchers
         ├── internal/avatar/    Dinosaur avatar catalog, pinned fetch seam, and pure-Go WebP-to-PNG avatar transcoder (centred square crop to 512x512, 4 MiB/16.8 Mpx input bound, 1 MiB output ceiling)
         ├── internal/homebrew/  Homebrew CLI wrapper (JSON output parsing)
         ├── internal/developerfeeds/ Pure-Go developer feed OPML catalog (go:embed) and offline validator
@@ -100,15 +101,15 @@ There is no current System primary page or `system_page.go` implementation.
 
 ### Architecture route map
 
-The configuration-to-navigation one-to-one assumption is explicitly retired:
-a configuration page is a stable YAML namespace, not a destination identity.
-The [destination and action ownership matrix](destination-matrix.md) records
-all current groups/actions and the five-section target of #241. It retains
-original `(configuration page, group)` references across primary/detail routes,
-including the shared channel and Homebrew inventory cases. That target is not
-a claim that the five-section sidebar has shipped: the current mounts above
-remain until #201's cutover. #342/#343 implement the navigation/composition seam;
-`internal/navigation` remains the sole route authority.
+The configuration-to-navigation one-to-one assumption is retired: a config
+page is a stable YAML namespace, not a destination identity. `internal/navigation`
+owns the seven current primary routes, their detail routes and page-qualified
+group references. The [destination matrix](destination-matrix.md) preserves
+the former five-section proposal as historical analysis, not the navigation
+target: #201 was closed as superseded by the seven-route decision. Livery
+remains the primary for profile picture and supported icon surfaces; its
+`livery_page` groups still gate each builder independently. #342/#343 supplied
+the navigation and composition seam without replacing the primary inventory.
 
 ## Key Patterns
 
@@ -195,6 +196,7 @@ Per-wrapper mechanics:
 - **avatar**: `Applier.Dispatch` (`internal/avatar/applier.go`) reads `dryrun.Enabled()` first and returns before constructing a process or opening a file, logging `[DRY-RUN] would set avatar to <id>`. A live dispatch reports which route took effect as an `avatar.Route`: `RouteBusctl` when AccountsService accepted `SetIconFile` over `busctl`, `RouteFaceFile` when that call failed or was unreachable and the icon was written to `~/.face.icon` and `~/.face` instead (picked up at the next session start, not immediately), and no route at all when both failed. A canceled context is reported as an error rather than being treated as an unreachable bus, so an abandoned action never writes into the user's home. The dispatch is deliberately unprivileged — AccountsService authorizes it for the caller's own account — so it takes no `pkexec` route and is classified as an unprivileged `os/exec` site in `internal/installcheck`'s journal contract. Its one caller is the Livery page's Profile Picture section (`account_group`, `internal/views/profile_picture.go`): opening the page only stats `avatar.CurrentPicture`'s candidates (AccountsService's icon, then `~/.face.icon`, then `~/.face`); picking a catalog row downloads and transcodes that one illustration for a preview, and only Apply writes the PNG to `$XDG_CACHE_HOME/chairlift/avatar.png` and dispatches it. Under `--dry-run` Apply writes no file and Dispatch logs the preview. A failed download or dispatch reveals a banner in the chooser and leaves the account's picture and the page row unchanged; the toast text for each route comes from `pageview.AvatarApplied`, so a face-file write never reads as a live change. The chooser is an `AdwDialog` built once with its ten rows and one `row-activated` handler.
 - **Developer onboarding tabs**: `openDeveloperOnboarding` (`internal/views/features_page.go`) is reached only from the success branch of `onDeveloperToggled`, and dispatches through `pageview.DeveloperOnboardingTargets(dryrun.Enabled(), enabled, succeeded)`. That pure function is the whole admission rule — a confirmed live enable is the only input combination that yields the three URLs, so `--dry-run` opens no browser processes during `make screenshots`, a disable is a no-op, and a failed promotion opens nothing. The URLs and their order are asserted headlessly in `internal/views/pageview`; the dispatch itself reuses `UserHome.openURL`, the same asynchronous `xdg-open` path the Help page links use, so a browser that fails to start reports its own failure by toast without touching the group promotion or the switch.
 - **Optional developer feed setup**: `startDeveloperFeedSetup` (`internal/views/features_page.go`) is called from that same success branch, and its admission rule is `actionmsg.DeveloperFeedSetupPlan(dryrun.Enabled(), enabled, succeeded, installPulp, stageFeeds)`. Only a confirmed live enable with at least one of `dx_group`'s `install_pulp`/`stage_feeds` set produces non-empty work, so a preview installs nothing during `make screenshots`, a disable is a no-op, and a failed promotion starts no worker. The plan is a value read from config on the main thread before the goroutine starts, so the worker touches no widget and no view state; it calls `internal/developerfeeds`'s `Provision` and `StageOPML` (both of which re-check `dryrun.Enabled()` as defense in depth) and marshals a single `actionmsg.DeveloperFeedFeedback` result back through `sgtk.RunOnMainThread` to one toast. `developerFeedGate` refuses a second setup while an install is in flight, and the toast is nil-guarded. The wording and the failure classification come from the same tested decision struct, which is what keeps a failed optional install from reading as a failed permission change and keeps "staged" from reading as "imported".
+- **Legacy desktop launcher cleanup**: `legacydesktop.Clean` (`internal/legacydesktop/legacydesktop.go`) runs in a background goroutine at startup. Under `--dry-run`, it logs what would be removed without deleting the file.
 ### Configuration-driven UI visibility
 
 Each preference group on every page checks `config.IsGroupEnabled(pageName, groupName)` before building its widgets. Groups default to enabled if not specified in config. Both `maintenance_cleanup_group` and `reset_group` default to disabled in the default config.
@@ -1371,6 +1373,20 @@ Two inputs deliberately never cross the pkexec boundary as arguments:
   rejects an absent, non-numeric, or root value), so an authenticated caller
   cannot add an unrelated account to the privileged developer groups.
 
+**Privileged action journal (`internal/journal`):** Every privileged dispatch
+point through `helperexec.Run` unconditionally journals before execution
+(`journal.Record`), recording the action name, input arguments, and would-run
+argv, marked as `suppressed: "dry-run"` in preview mode or `suppressed: "no"`
+for live attempts. After a live command returns, `helperexec.Run` records the
+execution outcome (`journal.RecordOutcome`) with `outcome` in `succeeded`,
+`refused` (PolicyKit authentication dismissed or denied with pkexec exit status
+126 or 127), `failed` (other non-zero exit with exit code), `timed-out`, or
+`cancelled`. Before executing a derived privileged command (such as a concrete
+`bootc switch` target), `cmd/chairlift-helper` prints a machine-readable line
+(`chairlift-helper: exec <argv json>`); `helperexec.Run` parses this line from
+output, strips it from caller-visible stdout/stderr, and includes the concrete
+argv list as `executed` (`[][]string`) in the journal outcome record.
+
 Gaming mode, the third Bluefin-family feature, crosses no privilege boundary
 at all: every component is a user-scope Flatpak installed with
 `flatpak install --user`, the same reasoning that keeps Homebrew tap trust
@@ -1438,7 +1454,9 @@ surface in three layers that must stay separate:
   only when the user's `MaintenanceAfterUpdates` preference is set.
 - `internal/updateproviders` holds the production `updateflow.Provider`
   values, which wrap `internal/flatpak`, `internal/homebrew`, `internal/updex`,
-  and `internal/bootc`; the coordinator executes nothing itself.
+  and `internal/bootc`; the coordinator executes nothing itself. Flatpak
+  reconciliation verifies that all applied refs for each executed scope have
+  cleared, ignoring newly appeared updates.
 - `internal/views/updatepresent` maps one snapshot to the shell's title,
   description, banner, and action label, and each source's row subtitle. A
   source whose policy has `Configured` false reads "Disabled by
@@ -2093,10 +2111,11 @@ page_name:
 ### Key config groups
 
 The [configuration reference](../reference.md) describes the current schema.
-The [destination matrix](destination-matrix.md#configuration-references-and-owners)
-provides the complete 26-group inventory with original namespaces, current
-mounts, proposed destinations and action owners. Derive additions from
-`config.SchemaGroups`; do not infer keys from the sidebar. In particular,
+The [historical destination matrix](destination-matrix.md#configuration-references-and-owners)
+records the original namespace and action audit but its five-route target and
+group count are superseded. Derive current group inventories from
+`config.SchemaGroups` and current routes from `internal/navigation`; do not infer
+policy keys from sidebar titles. In particular,
 `channel_group` and `bootc_status_group` belong to `updates_page`, while
 routine cleanup uses `maintenance_freespace_group`. Legacy System-page input
 is handled by the migration described above, not a current System namespace.

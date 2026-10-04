@@ -149,7 +149,8 @@ A distribution may also configure it to install the Pulp feed reader and stage
 a curated list of developer feeds in your home folder once you switch it on —
 both are off by default, and turning Developer tools back off never removes the
 reader, the file, or anything you imported from it.
-Developer options also offer **WSL Mode** (Ubuntu LTS in Lima), **Enable
+Developer options also offer **WSL Mode** (nsl persistent Linux machines by
+default, with Lima Ubuntu LTS as an alternative), **Enable
 Docker**, and individually selected IDEs and terminal editors, including one
 JetBrains Toolbox entry. WSL needs hardware virtualization and access to
 `/dev/kvm`; permission grants require a new login. Docker needs the base
@@ -187,13 +188,11 @@ older message.
 
 ![Livery](screenshots/5-livery.png)
 
-Who you are, who you stand with, and what you roll with.
+Choose your profile picture and the icons shown around your desktop.
 Every foundation, Files/dock, profile-picture, and app-grid choice has a visual
 preview. Search results fetch artwork for at most twelve visible catalog entries;
 searching the rest does not download the whole catalog. Rotation changes the real
 login schedule with its preferences, and a failed save restores confirmed state.
-
-
 
 **Profile Picture** is the picture on your login and lock screens. Pick one of
 Project Bluefin's dinosaurs and Control Center downloads that one illustration
@@ -203,7 +202,7 @@ AccountsService is unavailable the picture is saved to your home folder
 instead and appears after you next sign in, and the confirmation says which of
 the two happened.
 
-**App Grid Livery** is your own mark on the Show Applications button on
+**App Launcher Icon** is your own mark on the Show Applications button on
 GNOME. On KDE Plasma, the same chooser updates each configured Kickoff applet;
 if no Kickoff applet is present, the group reports unavailable instead of
 pretending the setting can be applied. Search all 3,461 brands
@@ -213,7 +212,7 @@ You set it once; it never changes on its own, because a personal mark that
 rotated would stop being personal. Turning the mark off resets the Kickoff applet
 to Plasma's default icon.
 
-On GNOME, **Foundational Livery** puts a foundation's mark in the top bar:
+On GNOME, **Top Bar Icon** puts a foundation's mark in the top bar:
 CNCF, the Linux Foundation, GNOME, freedesktop.org, Apache, Rust, Universal
 Blue, Bazzite, Aurora, or the Open Gaming Collective. This section is omitted
 on Plasma, which has no corresponding top-bar surface. On a gaming image the
@@ -222,7 +221,7 @@ image ships — pick any other and it stays picked.
 Apache uses the foundation's current official oak-leaf mark, shown in monochrome
 like the other symbolic choices.
 
-**Dock Livery** marks the Files icon on GNOME or Dolphin on KDE Plasma with
+**Files Icon** marks the Files application on GNOME or Dolphin on KDE Plasma with
 the project you actually work on. Every CNCF project that publishes artwork
 is in the list — 214 of them, Kubernetes through bootc — so the picker searches
 rather than scrolls, and each one arrives as the project's own colour icon
@@ -265,8 +264,11 @@ development containers, and the other reinstalls the system from scratch.
 Those stay hidden normally until turned on or until a rollback exists.
 Recovery also has **Published versions**, which asks the image registry for
 the versions of your release stream from the last 90 days and lists one per
-day, marking the one you are running and the one Roll Back returns to. It is a
-list to read, not a control: nothing in it changes your system.
+day, marking the one you are running and the one Roll Back returns to. Each
+published build offers a **Pin** button to freeze updates at that specific
+dated version. When booted on a dated version, Recovery offers **Return to stream**
+to switch back to receiving regular stream updates. Both pin and return-to-stream
+ask you to confirm before applying the switch at the next restart.
 
 ---
 

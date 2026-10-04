@@ -199,6 +199,13 @@ control is hand-written Go, YAML, and data assets.
   on load, and re-reads after changes instead of treating exit 0 as proof.
   `desktop_integrations_group` stays discoverable on unsupported hosts with
   insensitive switches. Dry-run skips mutation and restores observed state.
+- **Legacy desktop launcher cleanup runs off the main thread.** Older frostyard
+  installs left `~/.local/share/applications/org.frostyard.ChairLift.desktop`. At
+  startup ChairLift asynchronously removes that file if and only if it is a
+  regular file with `Type=Application` and an `Exec` whose program basename is
+  `chairlift` or `chairlift-wrapper`; non-matching files, symlinks, and missing
+  files are left untouched, and dry-run logs what would be removed without
+  deleting.
 
 An agent must not break these:
 
@@ -263,7 +270,10 @@ An agent must not break these:
   `operating-system`), and it executes nothing itself — every provider is an
   `updateflow.Provider` whose production value in `internal/updateproviders`
   wraps the existing `internal/flatpak`, `internal/homebrew`,
-  `internal/updex`, and `internal/bootc` entry points.
+  `internal/updex`, and `internal/bootc` entry points. Flatpak post-apply
+  reconciliation verifies that the specific pending refs applied for each
+  executed scope are no longer listed post-apply, so newly appeared updates
+  published between check and apply do not mark the run unchanged.
   `internal/views/updatepresent` is the equally pure presentation layer: it
   maps one immutable snapshot to a title, description, banner, and action
   label, so the shell's copy is testable on a headless host.
@@ -597,15 +607,21 @@ An agent must not break these:
   Failed observations preserve confirmed state, and previews mutate none of it.
   Do not restore separate counts or a provider-status owner in `UserHome`.
 - **Developer options remain discoverable without privileged support.** WSL
-  Mode uses Lima with an explicit `/dev/kvm` permission floor; the fixed
-  `kvm-enable` action grants access to the invoking account, effective after a
-  new login. Docker uses the fixed enable/disable actions for its system daemon
-  and requires actual socket readiness for this session, not installed CLI
-  tools alone. Missing installed helper actions leave the affected switches
-  insensitive with an explanation rather than hiding the options. IDE and
-  terminal-editor installs are individually selected, including one JetBrains
-  Toolbox entry. Gaming selects typed application/runtime refs, preserves
-  system-scope installations, and keeps partial failures visible.
+  Mode defaults to nsl (persistent Linux machines inside systemd-vmspawn and
+  QEMU/KVM) with Lima (Ubuntu LTS VM) as an alternative backend, both with an
+  explicit `/dev/kvm` permission floor; the fixed `kvm-enable` action grants
+  access to the invoking account, effective after a new login. The backend
+  choice is not stored: `wsl_backend` sets the default, and the first read
+  follows an existing Lima machine when no nsl machine exists
+  (`devtools.ResolveBackend`). A running machine stays stoppable even when
+  the start prerequisites are unmet. Docker uses the
+  fixed enable/disable actions for its system daemon and requires actual socket
+  readiness for this session, not installed CLI tools alone. Missing installed
+  helper actions leave the affected switches insensitive with an explanation
+  rather than hiding the options. IDE and terminal-editor installs are
+  individually selected, including one JetBrains Toolbox entry. Gaming selects
+  typed application/runtime refs, preserves system-scope installations, and
+  keeps partial failures visible.
 - **Config-driven visibility is real.** Any group can be disabled in config
   (`config.IsGroupEnabled(page, group)`), so its widgets may never be
   constructed. Code that runs after an async action must not assume a widget
@@ -643,7 +659,11 @@ An agent must not break these:
   change.
 - **Every privileged dispatch point journals, unconditionally.** `internal/ublue.runHelper`
   and `internal/updex.runHelper` call `journal.Record` on every invocation, dry-run
-  or live, before doing anything else. This is not a `chairlift_e2e` stub: with
+  or live, before doing anything else, and record the execution outcome
+  (`succeeded`, `refused`, `failed`, `timed-out`, or `cancelled`) and any
+  concrete privileged command derived inside the helper (`executed`) after the
+  command returns. Dry-run remains recorded as suppressed with no outcome
+  record. This is not a `chairlift_e2e` stub: with
   `$CHAIRLIFT_ACTION_JOURNAL` unset — every ordinary run — it costs one atomic
   load and does nothing else, so it ships in every released binary. Do not gate
   a new privileged call behind a helper that bypasses `runHelper`; the journal's
@@ -725,10 +745,13 @@ An agent must not break these:
   bounded by `MaxEntries` and expiring at `TTL`, and its callers run off the
   GTK main thread, so it must stay safe for concurrent readers. `Catalog`'s
   one caller is the Recovery page's **Published versions** row
-  (`internal/views/versions.go`), which reads only when the user presses
+  (`internal/views/versions.go`), which reads the registry when the user presses
   Check, lists one row per day of the running stream
-  (`pageview.PublishedVersions` drops other streams' aliases), and removes the
-  last list when a read fails rather than leaving it standing as current.
+  (`pageview.PublishedVersions` drops other streams' aliases), removes the
+  last list when a read fails rather than leaving it standing as current,
+  and offers a confirmed Pin action for each build that stages a switch to
+  that dated tag (`chairlift-helper pin <YYYYMMDD>`). When booted on a dated
+  tag, Recovery offers **Return to stream** (`chairlift-helper unpin`).
   `internal/bootc.CheckUpdate` also calls `Client.Tag` directly on composefs
   hosts (below); it only compares digests.
 - **Reading OS state never needs a password.** bootc 1.16 refuses
@@ -809,6 +832,12 @@ An agent must not break these:
   the service could not be proven stopped. Hardware behaviour — printing
   through a device, USB passthrough, mDNS coexistence — is unverified and
   unwired; say so rather than claim it.
+- **Livery remains one primary with independent task groups.** Profile
+  Picture, App Launcher Icon, supported Top Bar Icon, and Files Icon keep their
+  existing `livery_page` config keys and one built control set. Never add a
+  wallpaper entry until `wallpapers_group` has a working builder (#200); do not
+  clone the icon controls behind a second overview or a new sidebar route.
+
 - **Livery shadows icon-theme names, and the theme it writes into is not
   always hicolor.** GNOME's app-grid button (`view-app-grid-symbolic`), panel
   menu (`PanelIconName(id)`, i.e. `chairlift-livery-<id>-symbolic`, via the

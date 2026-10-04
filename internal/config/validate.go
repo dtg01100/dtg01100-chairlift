@@ -283,6 +283,15 @@ func validateGroupFieldEntries(src configSource, group string, fieldsNode *yaml.
 		if err := value.Decode(target.Interface()); err != nil {
 			return validatorDecodeError(src.path, err)
 		}
+		if name == "wsl_backend" {
+			if backend := value.Value; value.Tag != "!!null" && backend != "nsl" && backend != "lima" {
+				return &LoadError{
+					Path:   src.path,
+					Kind:   KindSchema,
+					Detail: fmt.Sprintf("wsl_backend %q must be \"nsl\" or \"lima\" (line %d)", backend, effectiveNodeLine(value)),
+				}
+			}
+		}
 	}
 
 	return nil

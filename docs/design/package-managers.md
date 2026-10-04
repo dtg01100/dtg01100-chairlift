@@ -566,6 +566,10 @@ so runtimes and extensions are deliberately excluded from the results. Update
 rows and the sidebar update badge therefore only ever describe applications,
 which is what the user can act on from the applications page.
 
+### Post-apply reconciliation
+
+`flatpak update` exits 0 on paths that pull nothing (such as printing "Nothing to update."). A zero exit is therefore not evidence that pending updates landed. `internal/updateproviders.NewFlatpak` reconciles each executed scope by re-listing updates post-apply and comparing them against the specific set of refs that were pending and applied for that scope. The mutation reports `Changed: true` only when all applied refs for each executed scope have cleared (none of the applied refs remain in the post-apply listing). Newly appeared updates published between check and apply are not in the applied set and do not mark the run unchanged.
+
 ## Developer workstation options (`internal/devtools`)
 
 Features keeps the **Developer Mode** access switch and presents **WSL Mode**,
@@ -582,19 +586,25 @@ Installs use the existing typed Homebrew wrapper, tap only `ublue-os/tap`, and
 trust only the chosen cask. Formula and cask inventories determine Installed;
 a failed inventory is not treated as an absent package.
 
-WSL Mode follows Common's `setup-lima` recipe: check actual `/dev/kvm`
-read/write access, install `lima` (Homebrew supplies QEMU), prepend the Lima SSH
-Include to the user's SSH config, create `ubuntu` with writable home mounts
-from `template:ubuntu-lts`, enable its autostart and probe `limactl shell ubuntu
-true`. Running alone never claims shell readiness. The only access mutation
-is the fixed `kvm-enable` helper word, invoked only on an explicit enable;
-after a group grant the row asks for a new login and remains off. Disable
-attempts both autostart removal and stop, never deletes the VM or its data.
-A failed stop is followed by a real state read, so a still-running VM stays on.
-Lima's `list --json` is a JSON-object stream, not an array, and a successful
-empty inventory emits a warning on stderr. Parse stdout only; merging that
-warning into JSON would block first-time VM creation. The regression covers
-that empty-inventory case. Mutation output retains a bounded diagnostic tail.
+WSL Mode offers a choice of backends: **nsl** by default (persistent Linux
+machines as systemd-nspawn containers inside a small VM via systemd-vmspawn and
+QEMU/KVM) and **Lima** (Ubuntu LTS VM). Both check actual `/dev/kvm`
+read/write access and reuse the fixed `kvm-enable` helper word, invoked only on
+an explicit enable; after a group grant the row asks for a new login and remains
+off. With nsl, the CLI is installed from `frostyard/tap/nsl` via Homebrew, host
+prerequisites are checked with `nsl doctor`, and machines run as the user
+without daemons. Disable stops machines with `nsl shutdown` and keeps disks and
+user files. With Lima, setup follows Common's `setup-lima` recipe: install
+`lima` (Homebrew supplies QEMU), prepend the Lima SSH Include to the user's SSH
+config, create `ubuntu` with writable home mounts from `template:ubuntu-lts`,
+enable autostart and probe `limactl shell ubuntu true`. Running alone never
+claims shell readiness. Disable attempts both autostart removal and stop, never
+deletes the VM or its data. A failed stop is followed by a real state read, so a
+still-running VM stays on. Lima's `list --json` is a JSON-object stream, not an
+array, and a successful empty inventory emits a warning on stderr. Parse stdout
+only; merging that warning into JSON would block first-time VM creation. The
+regression covers that empty-inventory case. Mutation output retains a bounded
+diagnostic tail.
 
 Enable Docker installs the CLI, Compose, LazyDocker and Dive in user Homebrew.
 It refuses to enable without the base image's Docker daemon. The fixed
@@ -859,7 +869,14 @@ including its unconditional journal and dry-run handling. The fixed
 `/usr/bin/chairlift-helper` accepts `pin <YYYYMMDD> [--dry-run]` and
 `unpin [--dry-run]`. The day must be eight ASCII digits naming a real date
 no later than today UTC. No image reference crosses pkexec (ADR-0001).
-Recovery's selection UI is separate work in #360.
+Recovery's selection UI (`internal/views/versions.go` and `internal/views/recovery.go`)
+provides confirmed actions: each build row in the Published versions list offers a
+confirmed Pin action that sends only the validated day word, and a host booted on a
+dated tag is offered a confirmed "Return to stream" (unpin) row. Both controls are
+gated on `ublue.StatusCached().Supports(command)` (insensitive with an explanation
+when unsupported), confirm via `AdwAlertDialog` with text from `pageview`, restore
+controls without changing the list on failure or dry-run, and refresh bootc status on
+live success (#360).
 
 `ubluehelper.PinArgs` owns the derivation and resolver seam required by
 [ADR-0017](../adr/0017-pin-through-a-validated-day-word.md). It recovers the

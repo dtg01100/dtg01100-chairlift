@@ -9,6 +9,7 @@ import (
 
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/imageinfo"
+	"github.com/projectbluefin/chairlift/internal/legacydesktop"
 	"github.com/projectbluefin/chairlift/internal/navigation"
 	"github.com/projectbluefin/chairlift/internal/window"
 
@@ -126,6 +127,10 @@ func New() *Application {
 	} else if path != "" {
 		log.Printf("channel table loaded from %s", path)
 	}
+
+	go func() {
+		_ = legacydesktop.Clean()
+	}()
 
 	// Register command line options
 	app.registerOptions()

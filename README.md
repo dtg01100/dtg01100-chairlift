@@ -32,7 +32,7 @@ shown in the real application, captured by `make screenshots`.
 ### 🤖 Agents
 
 - **Agent Mode**: one switch installs [llmman](https://github.com/llmmanorg/llmman)
-  from Homebrew (plus the Jan chat app on x86_64) and runs it as a systemd
+  from Homebrew and runs it as a systemd
   user service on `127.0.0.1:17434`, with its web shell and prompt history
   off. llmman picks the engine for your hardware; apps opened afterwards find
   it through `OLLAMA_HOST`. Turning it off keeps the software and models.
@@ -90,14 +90,14 @@ never asks for a reboot.
 
 ### 🎨 Livery
 
-- **App Grid Livery**: your own mark on GNOME's Show Applications button or
+- **App Launcher Icon**: your own mark on GNOME's Show Applications button or
   the configured KDE Plasma Kickoff applet — searchable across all
   3,461 brands [Simple Icons](https://simpleicons.org/) publishes, fetched on
   demand
-- **Foundational Livery**: a mark in the top bar — CNCF, Linux Foundation,
+- **Top Bar Icon**: a mark in the top bar — CNCF, Linux Foundation,
   GNOME, freedesktop.org, Apache, Rust, Universal Blue, Bazzite, Aurora, or
   the Open Gaming Collective, which is the default on a gaming image
-- **Dock Livery**: your CNCF project's own colour icon on the Files icon —
+- **Files Icon**: your CNCF project's own colour icon on the Files icon —
   search all 214 projects that publish artwork, from Kubernetes to bootc
 - **Rotate at Login**: the two foundation sections can advance one step each
   time you sign in. Any section also accepts an SVG of your own
@@ -234,7 +234,7 @@ Other useful targets: `make dev` (CGO-enabled build with `-race` for development
 - Flatpak (optional)
 - `bootc` and the snow `/usr/libexec/bootc-update-stage` script (optional; enables staged system updates on bootc installs)
 - `updex` features configured on the system (optional; toggled via the Features page)
-- Homebrew with the `llmmanorg/tap` tap reachable (optional; Agent Mode installs `llmmanorg/tap/llmman` and, on x86_64, the `ai.jan.Jan` Flatpak)
+- Homebrew with the `llmmanorg/tap` tap reachable (optional; Agent Mode installs `llmmanorg/tap/llmman`)
 - The `uupd.timer` systemd unit (optional; backs the automatic-updates switch, whose state `internal/autoupdate` reads and whose enable/mask the ublue helper performs — ChairLift never executes the `uupd` binary itself)
 
 ---
