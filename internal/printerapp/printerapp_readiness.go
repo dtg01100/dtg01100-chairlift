@@ -33,6 +33,18 @@ const (
 	// StateFailed: the unit is installed but the service is not running —
 	// failed, inactive, or the check itself could not be made.
 	StateFailed
+	// StateFailedDeviceAccess: the unit is installed but cannot access the
+	// printer device in rootless mode (permission denied on /dev/usb, /dev/bus/usb, etc.).
+	StateFailedDeviceAccess
+	// StateFailedImage: the unit is installed but the container image is
+	// unavailable or failed to pull.
+	StateFailedImage
+	// StateFailedPlugin: the unit is installed but proprietary driver/plugin
+	// verification failed (signature or checksum mismatch).
+	StateFailedPlugin
+	// StateFailedCrash: the unit is installed but the service crashed
+	// (exited with fatal signal, core dump, or fatal error).
+	StateFailedCrash
 )
 
 // Facts are the observations Resolve derives a State from.
@@ -110,30 +122,25 @@ func WaitSettled(ctx context.Context, app App, limit time.Duration) (string, err
 // whether the application is on; the is-active word decides whether "on"
 // means running. A unit that is present is never Blocked: the user turned
 // it on, and turning it off must stay possible whatever the image's
-// administration surface is.
+// administration surface is. Detailed failure classification comes from
+// Diagnose or ProbeDiagnostics.
 func Resolve(f Facts) State {
-	switch {
-	case !f.Capable:
-		return StateUnavailable
-	case f.UnitPresent && !f.Checked:
-		return StateStarting
-	case f.UnitPresent:
-		switch f.Active {
-		case "active":
-			return StateReady
-		case "activating", "reloading":
-			return StateStarting
-		default:
-			return StateFailed
-		}
-	case !f.Enableable:
-		return StateBlocked
-	default:
-		return StateOff
-	}
+	return Diagnose(DiagnosticInput{
+		Capable:     f.Capable,
+		Enableable:  f.Enableable,
+		UnitPresent: f.UnitPresent,
+		Checked:     f.Checked,
+		Active:      f.Active,
+	})
 }
 
 // On reports whether the switch should read on in this state.
 func (s State) On() bool {
-	return s == StateStarting || s == StateReady || s == StateFailed
+	switch s {
+	case StateStarting, StateReady, StateFailed,
+		StateFailedDeviceAccess, StateFailedImage, StateFailedPlugin, StateFailedCrash:
+		return true
+	default:
+		return false
+	}
 }

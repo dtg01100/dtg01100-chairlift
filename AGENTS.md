@@ -820,14 +820,19 @@ An agent must not break these:
   `PRINTER_APP_ADMIN_GROUP`, and `PRINTER_APP_SERVER_OPTIONS` — may be named
   in comments and docs as what will be wired, but no ChairLift code reads or
   writes those names until an image ships them; and do not turn the lock
-  into a hidden group or a switch that fails on every flip. Readiness on the
-  row comes from `printerapp.Observe`/`ProbeActive`/`Resolve` — `systemctl
-  --user is-active`'s state *word*, off the main thread — never from the
-  unit file's presence alone, and a present unit is never locked, so turning
-  a family off always stays possible. A failed disable keeps the unit because
-  the service could not be proven stopped. Hardware behaviour — printing
-  through a device, USB passthrough, mDNS coexistence — is unverified and
-  unwired; say so rather than claim it.
+  into a hidden group or a switch that fails on every flip. Readiness and
+  failure classification on the row come from
+  `printerapp.Observe`/`ProbeActive`/`ProbeDiagnostics`/`Diagnose` —
+  `systemctl --user is-active`'s state *word*, systemd Result/SubState
+  properties, journal logs, and container image presence probes, off the main
+  thread — never from the unit file's presence alone, and a present unit is
+  never locked, so turning a family off always stays possible. Failure modes
+  — missing Podman, rootless device access failure, unavailable image, plugin
+  verification failure, and service crash — are classified as actionable
+  non-enabled or failed states, never a false enabled indicator. A failed
+  disable keeps the unit because the service could not be proven stopped.
+  Hardware behaviour — printing through a device, USB passthrough, mDNS
+  coexistence — is unverified and unwired; say so rather than claim it.
 - **Livery remains one primary with independent task groups.** Profile
   Picture, App Launcher Icon, supported Top Bar Icon, and Files Icon keep their
   existing `livery_page` config keys and one built control set. Never add a

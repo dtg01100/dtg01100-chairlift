@@ -40,7 +40,7 @@ func TestPrinterFamilyRowNamesEveryFamilyDistinctly(t *testing.T) {
 // failed, or blocked family can never be mistaken for one that works.
 func TestPrinterAppSubtitleDistinguishesEveryState(t *testing.T) {
 	seen := map[string]printerapp.State{}
-	for s := printerapp.StateUnavailable; s <= printerapp.StateFailed; s++ {
+	for s := printerapp.StateUnavailable; s <= printerapp.StateFailedCrash; s++ {
 		text := PrinterAppSubtitle(s, 18010)
 		if prev, dup := seen[text]; dup {
 			t.Errorf("states %d and %d share subtitle %q", prev, s, text)
@@ -48,6 +48,48 @@ func TestPrinterAppSubtitleDistinguishesEveryState(t *testing.T) {
 		seen[text] = s
 		if s != printerapp.StateReady && strings.HasPrefix(text, "Running") {
 			t.Errorf("state %d claims running: %q", s, text)
+		}
+	}
+}
+
+// Every diagnostic failure state is actionable and describes what went wrong
+// and what to do, without claiming running or paper output.
+func TestPrinterAppDiagnosticSubtitlesAreActionable(t *testing.T) {
+	cases := []struct {
+		state printerapp.State
+		wants []string
+	}{
+		{
+			state: printerapp.StateUnavailable,
+			wants: []string{"Not available", "Podman is not installed"},
+		},
+		{
+			state: printerapp.StateFailedDeviceAccess,
+			wants: []string{"device access failed", "permission", "USB", "lp"},
+		},
+		{
+			state: printerapp.StateFailedImage,
+			wants: []string{"image unavailable", "download", "registry"},
+		},
+		{
+			state: printerapp.StateFailedPlugin,
+			wants: []string{"plugin verification failed", "signature"},
+		},
+		{
+			state: printerapp.StateFailedCrash,
+			wants: []string{"crashed unexpectedly", "journalctl", "restart"},
+		},
+	}
+
+	for _, tc := range cases {
+		text := strings.ToLower(PrinterAppSubtitle(tc.state, 18010))
+		for _, want := range tc.wants {
+			if !strings.Contains(text, strings.ToLower(want)) {
+				t.Errorf("state %d subtitle %q does not contain %q", tc.state, text, want)
+			}
+		}
+		if strings.HasPrefix(text, "running") {
+			t.Errorf("failed state %d claims running: %q", tc.state, text)
 		}
 	}
 }
