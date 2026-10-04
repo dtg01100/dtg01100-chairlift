@@ -195,7 +195,10 @@ func Run(ctx context.Context, pkexecPath, helperPath string, args ...string) (st
 			return cleanStdout, cleanStderr, nil
 		}
 		exitCode := cmd.ProcessState.ExitCode()
-		if exitCode == 126 || exitCode == 127 {
+		// pkexec exits 127 both for a refused authorization and for a helper
+		// it cannot execute ("Error accessing <path>"); only the former is a
+		// refusal.
+		if exitCode == 126 || (exitCode == 127 && !strings.Contains(cleanStderr, "Error accessing")) {
 			journal.RecordOutcome(action, journal.OutcomeRefused, &exitCode, executed)
 		} else {
 			journal.RecordOutcome(action, journal.OutcomeFailed, &exitCode, executed)
