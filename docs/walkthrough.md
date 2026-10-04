@@ -20,7 +20,7 @@ the menu, `chairlift --setup`, or its `--first-run` alias to walk the existing
 first screenshot shows Features, not a welcome dialog. Pages unavailable on
 this computer are skipped. The ordinary page controls perform every action;
 **Back** and **Next** only navigate. **Finish** remembers completion, and
-**Dismiss** remembers a skip without undoing a previous completion.
+**Dismiss setup** (or Escape) remembers a skip without undoing a previous completion.
 
 ---
 
@@ -100,7 +100,7 @@ Homebrew as a third-party source. Installs show native activity and streamed com
 while they run, using the same controls in the explicit setup flow.
 
 Removing an installed app asks first, and says whether
-it leaves only your account or everyone's.
+it leaves only your account (user Flatpak) or everyone's (system Flatpak).
 **Export package list** saves what
 you have installed so you can put it back on another machine.
 Export shows **Exporting…** and an activity spinner until it finishes, then
@@ -116,20 +116,21 @@ becomes available again, including after a failed export.
 generated locally — nothing you type is sent to a cloud service — and prompts
 are not saved. Turning it on installs the llmman model server from Homebrew,
 downloads the engine that suits your hardware, and starts it on this computer
-only. Goose is the client setup path on Help. Turning it off stops the
-server and keeps the software and any models you downloaded.
-The row shows an activity spinner throughout setup and shutdown, then
+only. Turning it off stops the server and keeps the software and any models you
+downloaded. The row shows an activity spinner throughout setup and shutdown, then
 restores the switch if the operation fails.
 
 **Active Model** and **Recommended Presets** remain visible, becoming usable
 only when the local server is ready. **Goose** is the Agent Mode desktop GUI,
 launched with the active model through llmman without rewriting your persistent
 configuration. It becomes launchable once Goose Desktop, linux-mcp-server, and
-the verified Linux diagnostic toolset are in place. **Show Ask Bluefin in menu**
-toggles the shortcut in GNOME's top panel menu. The connection address is directly
-selectable, not hidden in Details. Apps and terminals opened after Agent Mode
-is on receive `OLLAMA_HOST`; already-open ones need restarting. Everything
-here runs in your own account, without an administrator password.
+the verified Linux diagnostic toolset are in place. The desktop shortcut and
+`chairlift --ask-bluefin` launch Goose Desktop directly when ready, or open
+Control Center to the Agents page naming the missing requirement. **Show Ask
+Bluefin in menu** toggles the shortcut in GNOME's top panel menu. The connection
+address is directly selectable, not hidden in Details. Apps and terminals opened
+after Agent Mode is on receive `OLLAMA_HOST`; already-open ones need restarting.
+Everything here runs in your own account, without an administrator password.
 
 **Contribute to Bluefin** runs the Hive contributor appliance in a terminal to
 contribute tasks to Project Bluefin. Before launch, preflight verifies that
@@ -181,8 +182,11 @@ your network; when one is running, its row names the local web page where you
 add and manage printers. The switches are locked for now, and each row says
 why: a family can be turned on only once its driver image accepts an
 administrator credential for that web page, so nothing on your network can
-reach an unprotected administration screen. Printing through a real device
-has not yet been verified against hardware.
+reach an unprotected administration screen. The rows evaluate systemd state,
+journal logs, and container images to diagnose and surface actionable failures
+— device access permissions, image availability, plugin verification, or
+service crashes — rather than displaying a false enabled or running state.
+Printing through a real device has not yet been verified against hardware.
 **Optional features** is the distribution's own feature manager; it is hidden
 where the distribution ships none. When a computer offers none of these —
 no Developer tools, no Gaming, no Printers, no optional features — the page
@@ -201,10 +205,11 @@ older message.
 ![Livery](screenshots/5-livery.png)
 
 Choose your profile picture and the icons shown around your desktop.
-Every foundation, Files/dock, profile-picture, and app-grid choice has a visual
-preview. Search results fetch artwork for at most twelve visible catalog entries;
-searching the rest does not download the whole catalog. Rotation changes the real
-login schedule with its preferences, and a failed save restores confirmed state.
+Every profile-picture, app launcher icon, top-bar icon, and Files icon choice
+has a visual preview. Search results fetch artwork for at most twelve visible
+catalog entries; searching the rest does not download the whole catalog.
+Rotation changes the real login schedule with its preferences, and a failed
+save restores confirmed state.
 
 **Profile Picture** is the picture on your login and lock screens. Pick one of
 Project Bluefin's dinosaurs and Control Center downloads that one illustration
@@ -240,9 +245,9 @@ rather than scrolls, and each one arrives as the project's own color icon
 straight from
 [cncf/artwork](https://github.com/cncf/artwork).
 
-Both can **Rotate at Login**, which moves one step down the list each time you
-sign in — so you stand somewhere slightly different every day without ever
-picking again.
+Both **Top Bar Icon** and **Files Icon** can **Rotate at Login**, which moves
+one step down the list each time you sign in — so you stand somewhere slightly
+different every day without ever picking again.
 
 Any section will also take an SVG of your own, which is the way in for
 anything not on the list.
@@ -270,9 +275,10 @@ nothing uses any more, and leaves your apps, files, and containers alone. It
 tells you how much it reclaimed only when it could measure it. An activity
 spinner remains visible while cleanup is running. Below it sit any
 **Maintenance tasks** whoever set up this computer added. **Recovery**
-holds the actions you can't undo (under **Maintenance → Recovery**): one returns
-to a previous system version, one removes the apps you installed and your
-development containers, and the other reinstalls the system from scratch.
+holds the actions you can't undo (under **Maintenance → Recovery**): **Roll Back**
+returns to the previous system version if an update went badly, **Powerwash**
+removes the apps you installed and your development containers, and **Factory Reset**
+reinstalls the system from scratch.
 Those stay hidden normally until turned on or until a rollback exists.
 Recovery also has **Published versions**, which asks the image registry for
 the versions of your release stream from the last 90 days and lists one per
