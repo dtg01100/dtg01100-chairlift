@@ -30,6 +30,10 @@ const (
 
 	// AskBluefinCommand is the command of the distro-owned Ask Bluefin menu entry.
 	AskBluefinCommand = "xdg-open https://ask.projectbluefin.io"
+
+	// AskBluefinDispatchCommand is the entry the distro is expected to ship in
+	// place of the web link; both are ChairLift's owned identity.
+	AskBluefinDispatchCommand = "chairlift --ask-bluefin"
 )
 
 // Entry represents a Custom Command Menu tuple: (label, command, icon, visible).
@@ -52,7 +56,7 @@ func IsDeveloperLabel(label string) bool {
 
 // IsAskBluefin reports whether an Entry matches ChairLift's owned Ask Bluefin identity.
 func IsAskBluefin(e Entry) bool {
-	return e.Label == AskBluefinLabel && e.Command == AskBluefinCommand
+	return e.Label == AskBluefinLabel && (e.Command == AskBluefinCommand || e.Command == AskBluefinDispatchCommand)
 }
 
 // runCommand is an injection seam for external command execution.

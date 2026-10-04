@@ -66,7 +66,7 @@ func (s State) MissingPrerequisite() string {
 	case StateModelUnavailable:
 		return "No model is selected in Agent Mode."
 	case StatePackagesMissing:
-		return "Goose Desktop is not installed."
+		return "Goose Desktop or linux-mcp-server is not installed."
 	case StateExtensionMissing:
 		return "Linux tools extension in Goose is not configured."
 	case StateExtensionUnsafe:

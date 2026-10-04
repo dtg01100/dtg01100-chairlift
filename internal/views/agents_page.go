@@ -71,6 +71,7 @@ func (uh *UserHome) buildAgentModeGroup(page *adw.PreferencesPage) {
 
 	gooseRow := adw.NewActionRow()
 	gooseRow.SetTitle(pageview.GooseRowTitle())
+	gooseRow.SetUseMarkup(false)
 	uh.gooseRow = gooseRow
 	uh.gooseSpinner = newActivitySpinner()
 	gooseRow.AddSuffix(&uh.gooseSpinner.Widget)

@@ -793,3 +793,12 @@ func TestApplyOperationalFailures(t *testing.T) {
 		}
 	})
 }
+
+func TestAskBluefinIdentityAcceptsTheDispatcherEntry(t *testing.T) {
+	if !IsAskBluefin(Entry{Label: AskBluefinLabel, Command: AskBluefinDispatchCommand}) {
+		t.Fatal("the chairlift --ask-bluefin entry is not recognised as Ask Bluefin")
+	}
+	if IsAskBluefin(Entry{Label: AskBluefinLabel, Command: "my-own-script"}) {
+		t.Fatal("a user-customised Ask Bluefin slot was claimed")
+	}
+}

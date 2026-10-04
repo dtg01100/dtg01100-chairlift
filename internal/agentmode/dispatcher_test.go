@@ -69,7 +69,7 @@ func TestDispatchAskBluefin(t *testing.T) {
 			wantAction: DispatchPresentAgents,
 			wantModel:  "",
 			wantState:  StatePackagesMissing,
-			wantReason: "Goose Desktop is not installed.",
+			wantReason: "Goose Desktop or linux-mcp-server is not installed.",
 		},
 		{
 			name: "linux-mcp-server missing -> present agents",
@@ -83,7 +83,7 @@ func TestDispatchAskBluefin(t *testing.T) {
 			wantAction: DispatchPresentAgents,
 			wantModel:  "",
 			wantState:  StatePackagesMissing,
-			wantReason: "Goose Desktop is not installed.",
+			wantReason: "Goose Desktop or linux-mcp-server is not installed.",
 		},
 		{
 			name: "extension missing -> present agents",
