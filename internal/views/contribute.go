@@ -18,7 +18,6 @@ import (
 func (uh *UserHome) buildContributeGroup(page *adw.PreferencesPage) {
 	group := adw.NewPreferencesGroup()
 	group.SetTitle("Contribute")
-	group.SetDescription("Contribute tasks to Project Bluefin. Donating local model inference is managed separately by Agent Mode.")
 
 	row := adw.NewActionRow()
 	row.SetTitle("Contribute to Bluefin")
