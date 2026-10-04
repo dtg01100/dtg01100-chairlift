@@ -152,7 +152,6 @@ func TestReadinessSubtitlesAndPrerequisites(t *testing.T) {
 		StatePackagesMissing,
 		StateExtensionMissing,
 		StateExtensionUnsafe,
-		StateLaunchFailure,
 	}
 
 	for _, state := range states {
@@ -176,15 +175,21 @@ func TestLaunchDryRun(t *testing.T) {
 	dryrun.Set(true)
 	defer dryrun.Set(false)
 
-	called := false
+	origResolve := resolveExecutable
 	origStart := startCmd
+	defer func() {
+		resolveExecutable = origResolve
+		startCmd = origStart
+	}()
+
+	resolveExecutable = func() string { return "/fake/llmman" }
+	called := false
 	startCmd = func(cmd *exec.Cmd, rf func(error)) error {
 		called = true
 		return nil
 	}
-	defer func() { startCmd = origStart }()
 
-	err := Launch("unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
+	err := Launch(context.Background(), "unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
 	if err != nil {
 		t.Fatalf("Launch() in dry-run returned error: %v", err)
 	}
@@ -196,22 +201,45 @@ func TestLaunchDryRun(t *testing.T) {
 func TestLaunchFailed(t *testing.T) {
 	dryrun.Set(false)
 
+	origResolve := resolveExecutable
+	origStart := startCmd
+	defer func() {
+		resolveExecutable = origResolve
+		startCmd = origStart
+	}()
+
+	t.Run("canceled context", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		err := Launch(ctx, "model", nil)
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("Launch() with canceled context want context.Canceled, got %v", err)
+		}
+	})
+
 	t.Run("empty model", func(t *testing.T) {
-		err := Launch("", nil)
+		err := Launch(context.Background(), "", nil)
 		if err == nil || !strings.Contains(err.Error(), "no active model") {
 			t.Errorf("Launch() with empty model want error, got %v", err)
 		}
 	})
 
+	t.Run("missing executable", func(t *testing.T) {
+		resolveExecutable = func() string { return "" }
+		err := Launch(context.Background(), "unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
+		if err == nil || !strings.Contains(err.Error(), "llmman executable not found") {
+			t.Errorf("Launch() with missing executable want error, got %v", err)
+		}
+	})
+
 	t.Run("start command error", func(t *testing.T) {
-		origStart := startCmd
+		resolveExecutable = func() string { return "/fake/llmman" }
 		startFailure := errors.New("cannot spawn goose-desktop")
 		startCmd = func(cmd *exec.Cmd, rf func(error)) error {
 			return startFailure
 		}
-		defer func() { startCmd = origStart }()
 
-		err := Launch("unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
+		err := Launch(context.Background(), "unsloth/Qwen3-8B-GGUF:Q4_K_M", nil)
 		if !errors.Is(err, startFailure) {
 			t.Errorf("Launch() error = %v, want %v", err, startFailure)
 		}
@@ -221,6 +249,11 @@ func TestLaunchFailed(t *testing.T) {
 func TestLaunchChildSurvivesCallerContext(t *testing.T) {
 	dryrun.Set(false)
 
+	sleepBin, err := exec.LookPath("sleep")
+	if err != nil {
+		sleepBin = "/bin/sleep"
+	}
+
 	origResolve := resolveExecutable
 	origStart := startCmd
 	defer func() {
@@ -228,20 +261,20 @@ func TestLaunchChildSurvivesCallerContext(t *testing.T) {
 		startCmd = origStart
 	}()
 
-	resolveExecutable = func() string { return "sleep" }
+	resolveExecutable = func() string { return sleepBin }
 
 	var capturedCmd *exec.Cmd
 	startCmd = func(cmd *exec.Cmd, reportFailure func(error)) error {
 		capturedCmd = cmd
 		// Adjust args so sleep receives valid numeric duration
-		cmd.Args = []string{"sleep", "2"}
+		cmd.Args = []string{sleepBin, "2"}
 		return launcher.Start(cmd, reportFailure)
 	}
 
 	callerCtx, cancel := context.WithCancel(context.Background())
-	_ = callerCtx // simulate caller holding a context
+	defer cancel()
 
-	err := Launch("test-model", nil)
+	err = Launch(callerCtx, "test-model", nil)
 	if err != nil {
 		t.Fatalf("Launch failed: %v", err)
 	}

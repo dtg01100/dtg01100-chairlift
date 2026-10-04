@@ -1,6 +1,7 @@
 package agentmode
 
 import (
+	"context"
 	"errors"
 	"log"
 	"os/exec"
@@ -19,7 +20,10 @@ var (
 // using the active model. It uses exec.Command without a context so the long-lived GUI
 // process is not tied to a caller's timeout or cancellation. Persistent Goose
 // configuration is left unchanged.
-func Launch(model string, reportFailure func(error)) error {
+func Launch(ctx context.Context, model string, reportFailure func(error)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if model == "" {
 		return errors.New("no active model selected")
 	}

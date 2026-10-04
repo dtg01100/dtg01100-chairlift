@@ -412,7 +412,7 @@ func (uh *UserHome) onGooseLaunchClicked() {
 		}
 
 		dryRun := dryrun.Enabled()
-		launchErr := agentmode.Launch(facts.ActiveModel, func(asyncErr error) {
+		launchErr := agentmode.Launch(ctx, facts.ActiveModel, func(asyncErr error) {
 			sgtk.RunOnMainThread(func() {
 				log.Printf("views: goose desktop exited with error: %v", asyncErr)
 				uh.toastAdder.ShowErrorToast("Goose Desktop encountered an error.")

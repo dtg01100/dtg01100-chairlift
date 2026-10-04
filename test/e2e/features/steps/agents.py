@@ -8,6 +8,7 @@ HOME and recording stubs to prove it.
 
 import os
 import shlex
+import subprocess
 
 from behave import step, then
 
@@ -176,6 +177,20 @@ def step_systemctl_no_mutations(context):
 def step_node_probed(context):
     ok = atspi.poll(lambda: "/llmman/node" in calls(context, "node-requests"))
     assert ok, "nothing requested /llmman/node from the node stub"
+
+
+@then('dconf was never asked to "{args}"')
+def step_dconf_never(context, args):
+    hits = [line for line in calls(context, "dconf") if line.startswith(args)]
+    assert not hits, f"dconf ran {hits}"
+
+
+@step('I run a second invocation with "{args}"')
+def step_second_invocation(context, args):
+    binary = getattr(context, "current_binary", context.app_binary)
+    cmd = [binary, *shlex.split(args)]
+    result = subprocess.run(cmd, env=context.launch_env, cwd=context.scenario_dir, timeout=10)
+    assert result.returncode == 0, f"second invocation failed ({result.returncode}): {result}"
 
 
 # ---------------------------------------------------------------- navigation

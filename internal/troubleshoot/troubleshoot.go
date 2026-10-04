@@ -376,10 +376,6 @@ func EnsureDiagnosticsConfigured() error {
 // runSetup is an injection seam for connecting the diagnostic extension.
 var runSetup = EnsureDiagnosticsConfigured
 
-func defaultRunSetup() error {
-	return EnsureDiagnosticsConfigured()
-}
-
 // Setup runs every step that still has work to do, reporting progress as it
 // goes. It returns the state afterwards so a caller can tell whether the run
 // actually left the feature usable.

@@ -158,6 +158,56 @@ def goose(context):
         )
 
 
+DEVMENU_PATH = "/org/gnome/shell/extensions/custom-command-list/"
+
+
+def _tuple(label, command, icon, visible):
+    return f"('{label}', '{command}', '{icon}', {'true' if visible else 'false'})"
+
+
+@stub("agents.devmenu")
+def devmenu(context):
+    """The Custom Command Menu extension with Ask Bluefin entry."""
+    dump = "\n".join(
+        [
+            "[/]",
+            "command11=" + _tuple("Ask Bluefin", "xdg-open https://ask.projectbluefin.io", "", True),
+            "",
+        ]
+    )
+    defaults = {
+        "command11": _tuple("Ask Bluefin", "xdg-open https://ask.projectbluefin.io", "", True),
+    }
+    dump_path = os.path.join(context.scenario_dir, "dconf-dump.txt")
+    with open(dump_path, "w", encoding="utf-8") as handle:
+        handle.write(dump)
+    default_cases = "\n".join(
+        f'      "{DEVMENU_PATH}{key}") echo "{value}" ;;' for key, value in defaults.items()
+    )
+    dconf_log = os.path.join(calls_dir(context), "dconf")
+    fake_executable(
+        context,
+        "dconf",
+        f'printf "%s\\n" "$*" >> "{dconf_log}"\n'
+        + f"""
+case "$1" in
+  dump)
+    [ "$2" = "{DEVMENU_PATH}" ] && cat "{dump_path}"
+    ;;
+  read)
+    if [ "$2" = "-d" ]; then
+      case "$3" in
+{default_cases}
+      esac
+    fi
+    ;;
+esac
+exit 0
+""",
+    )
+
+
+
 
 NODE_SERVER = r'''
 import json, sys

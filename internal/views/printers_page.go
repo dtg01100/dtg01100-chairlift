@@ -170,6 +170,12 @@ func (uh *UserHome) onPrinterAppToggled(pr *printerRow, enabled bool) {
 			facts.Checked, facts.Active = true, active
 		}
 
+		var confirmedState printerapp.State
+		decision := actionmsg.PrinterApp(dryRun, enabled, pr.title)
+		if err == nil && decision.Confirm {
+			confirmedState = printerapp.ProbeDiagnostics(ctx, pr.app, true)
+		}
+
 		sgtk.RunOnMainThread(func() {
 			pr.toggle.widget.SetSensitive(true)
 
@@ -183,10 +189,9 @@ func (uh *UserHome) onPrinterAppToggled(pr *printerRow, enabled bool) {
 				return
 			}
 
-			decision := actionmsg.PrinterApp(dryRun, enabled, pr.title)
 			pr.toggle.set(decision.Confirm == enabled)
 			if decision.Confirm {
-				uh.showPrinterAppState(pr, printerapp.ProbeDiagnostics(ctx, pr.app, true))
+				uh.showPrinterAppState(pr, confirmedState)
 			} else {
 				uh.showPrinterAppState(pr, pr.state)
 			}

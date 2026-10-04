@@ -99,7 +99,7 @@ func TestSetupConnectsExistingConfigurationWithoutChangingUserSettings(t *testin
 				t.Fatal(err)
 			}
 			dryrun.Set(true)
-			if err := defaultRunSetup(); err != nil {
+			if err := EnsureDiagnosticsConfigured(); err != nil {
 				t.Fatalf("preview: %v", err)
 			}
 			preview, _ := os.ReadFile(path)
@@ -107,7 +107,7 @@ func TestSetupConnectsExistingConfigurationWithoutChangingUserSettings(t *testin
 				t.Fatal("preview changed user settings")
 			}
 			dryrun.Set(false)
-			if err := defaultRunSetup(); err != nil {
+			if err := EnsureDiagnosticsConfigured(); err != nil {
 				t.Fatalf("connect existing config: %v", err)
 			}
 			got, err := os.ReadFile(path)
@@ -133,7 +133,7 @@ func TestSetupConnectsExistingConfigurationWithoutChangingUserSettings(t *testin
 			if info.Mode().Perm() != 0o600 {
 				t.Fatalf("configuration permissions = %o", info.Mode().Perm())
 			}
-			if err := defaultRunSetup(); err != nil {
+			if err := EnsureDiagnosticsConfigured(); err != nil {
 				t.Fatalf("repeat connection: %v", err)
 			}
 			repeated, _ := os.ReadFile(path)
@@ -166,7 +166,7 @@ func TestSetupRefusesConflictingConfigurationWithoutDataLoss(t *testing.T) {
 			if err := os.WriteFile(path, []byte(config), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := defaultRunSetup(); err == nil {
+			if err := EnsureDiagnosticsConfigured(); err == nil {
 				t.Fatal("conflicting configuration was replaced")
 			}
 			got, _ := os.ReadFile(path)
@@ -191,7 +191,7 @@ func TestSetupRefusesConfigurationSymlinks(t *testing.T) {
 	if err := os.Symlink(target, path); err != nil {
 		t.Fatal(err)
 	}
-	if err := defaultRunSetup(); err == nil {
+	if err := EnsureDiagnosticsConfigured(); err == nil {
 		t.Fatal("setup followed a configuration symlink")
 	}
 	got, _ := os.ReadFile(target)
@@ -211,7 +211,7 @@ func TestSetupUsesExistingConfigAfterInstallingMissingTools(t *testing.T) {
 	}
 	present := map[string]bool{"goose-desktop": true}
 	stubEnvironment(t, freshConfig, present)
-	runSetup = defaultRunSetup
+	runSetup = EnsureDiagnosticsConfigured
 	installPackage = func(string, bool) error {
 		present["linux-mcp-server"], present["goose"] = true, true
 		return nil
@@ -241,7 +241,7 @@ func TestSetupCopiesTheShippedConfiguration(t *testing.T) {
 	if err := os.WriteFile(defaultConfigPath, want, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := defaultRunSetup(); err != nil {
+	if err := EnsureDiagnosticsConfigured(); err != nil {
 		t.Fatal(err)
 	}
 	path, _ := ConfigPath()
@@ -262,7 +262,7 @@ func TestSetupPinsDiagnosticPolicyInNewPremadeConfig(t *testing.T) {
 			if err := os.WriteFile(defaultConfigPath, data, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if err := defaultRunSetup(); err != nil {
+			if err := EnsureDiagnosticsConfigured(); err != nil {
 				t.Fatalf("shipped default preset could not be set up: %v", err)
 			}
 			path, _ := ConfigPath()
@@ -295,7 +295,7 @@ func TestSetupDoesNotReplaceExplicitUnsafePremadePolicy(t *testing.T) {
 			if err := os.WriteFile(defaultConfigPath, data, 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if err := defaultRunSetup(); err == nil {
+			if err := EnsureDiagnosticsConfigured(); err == nil {
 				t.Fatal("unsafe explicit policy was silently replaced")
 			}
 			path, _ := ConfigPath()
@@ -310,7 +310,7 @@ func TestSetupPreviewDoesNotWriteConfiguration(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	dryrun.Set(true)
 	t.Cleanup(func() { dryrun.Set(false) })
-	if err := defaultRunSetup(); err != nil {
+	if err := EnsureDiagnosticsConfigured(); err != nil {
 		t.Fatal(err)
 	}
 	path, _ := ConfigPath()
@@ -327,7 +327,7 @@ func TestSetupRejectsInvalidPremadeConfiguration(t *testing.T) {
 	if err := os.WriteFile(defaultConfigPath, []byte("extensions: {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := defaultRunSetup(); err == nil {
+	if err := EnsureDiagnosticsConfigured(); err == nil {
 		t.Fatal("invalid shipped configuration was accepted")
 	}
 	path, _ := ConfigPath()
@@ -374,7 +374,7 @@ esac
 		lookPath, readConfig, tapPackage, installPackage, runSetup, defaultConfigPath = oldLook, oldRead, oldTap, oldInstall, oldSetup, oldDefault
 		dryrun.Set(false)
 	})
-	lookPath, readConfig, tapPackage, installPackage, runSetup = defaultLookPath, defaultReadConfig, homebrew.Tap, homebrew.Install, defaultRunSetup
+	lookPath, readConfig, tapPackage, installPackage, runSetup = defaultLookPath, defaultReadConfig, homebrew.Tap, homebrew.Install, EnsureDiagnosticsConfigured
 	dryrun.Set(false)
 	defaultConfigPath = filepath.Join(prefix, "preset.yaml")
 	preset := fmt.Sprintf("extensions:\n  linux-mcp-server:\n    type: stdio\n    cmd: %q\n    args: [--toolset, FIXED, --no-search-for-ssh-key, --verify-host-keys]\n", filepath.Join(bin, "linux-mcp-server"))
@@ -514,7 +514,7 @@ func TestSetupRefusesSharedDiagnosticMappings(t *testing.T) {
 			if err := os.WriteFile(path, original, 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := defaultRunSetup(); err == nil {
+			if err := EnsureDiagnosticsConfigured(); err == nil {
 				t.Fatal("repair changed an extension shared with unrelated settings")
 			}
 			got, _ := os.ReadFile(path)
@@ -538,7 +538,7 @@ func TestSetupRepairsStaleDiagnosticExecutable(t *testing.T) {
 	if Detect().Wired {
 		t.Fatal("missing executable was reported connected")
 	}
-	if err := defaultRunSetup(); err != nil {
+	if err := EnsureDiagnosticsConfigured(); err != nil {
 		t.Fatal(err)
 	}
 	after := Detect()

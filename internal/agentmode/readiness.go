@@ -31,8 +31,6 @@ const (
 	StateExtensionMissing
 	// StateExtensionUnsafe indicates linux-tools extension is malformed or violates safety policy.
 	StateExtensionUnsafe
-	// StateLaunchFailure indicates the process failed to launch.
-	StateLaunchFailure
 )
 
 // String returns a human-readable representation of State.
@@ -50,8 +48,6 @@ func (s State) String() string {
 		return "ExtensionMissing"
 	case StateExtensionUnsafe:
 		return "ExtensionUnsafe"
-	case StateLaunchFailure:
-		return "LaunchFailure"
 	default:
 		return fmt.Sprintf("State(%d)", int(s))
 	}
@@ -75,8 +71,6 @@ func (s State) MissingPrerequisite() string {
 		return "Linux tools extension in Goose is not configured."
 	case StateExtensionUnsafe:
 		return "Linux tools extension in Goose is unsafe."
-	case StateLaunchFailure:
-		return "Failed to launch Goose Desktop."
 	default:
 		return ""
 	}
@@ -100,8 +94,6 @@ func (s State) Subtitle(model string) string {
 		return "Linux tools extension in Goose is not configured."
 	case StateExtensionUnsafe:
 		return "Linux tools extension in Goose has unsafe settings."
-	case StateLaunchFailure:
-		return "Failed to launch Goose Desktop."
 	default:
 		return ""
 	}

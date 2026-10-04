@@ -176,3 +176,21 @@ Feature: Agents page
     When I open the "Agents" page
     Then the "Contribute to Bluefin" row says "Register this machine first — see https://github.com/projectbluefin/contribute#configuration"
     And the "Contribute" button in the "Contribute to Bluefin" row is insensitive
+
+  @stub.agents.devmenu
+  Scenario: Show Ask Bluefin in menu dry-run toggle previews and restores without writing dconf
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the switch in the "Show Ask Bluefin in menu" row is on
+    When I toggle the switch in the "Show Ask Bluefin in menu" row
+    Then the application log contains "[DRY-RUN] would set Custom Command Menu command11 visible=false"
+    And the switch in the "Show Ask Bluefin in menu" row is on
+    And dconf was never asked to "write"
+    And dconf was never asked to "reset"
+
+  Scenario: A second invocation with ask-bluefin lands on Agents when prerequisite is missing
+    Given ChairLift is running
+    When I open the "Apps" page
+    And I run a second invocation with "--dry-run --ask-bluefin"
+    Then the "Agents" page is shown
+    And I see "Agent Mode is not running."

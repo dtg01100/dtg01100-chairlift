@@ -174,7 +174,7 @@ func (a *Application) onCommandLine(cl *gio.ApplicationCommandLine) int32 {
 			sgtk.RunOnMainThread(func() {
 				defer a.Release()
 				if decision.Action == agentmode.DispatchLaunch {
-					launchErr := agentmode.Launch(decision.Model, func(asyncErr error) {
+					launchErr := agentmode.Launch(ctx, decision.Model, func(asyncErr error) {
 						log.Printf("app: goose desktop exited with error: %v", asyncErr)
 					})
 					if launchErr == nil {
@@ -188,7 +188,7 @@ func (a *Application) onCommandLine(cl *gio.ApplicationCommandLine) int32 {
 
 				a.Activate()
 
-				if a.window != nil {
+				if running && a.window != nil {
 					a.window.NavigateToAgentsPage()
 					a.window.ShowMissingPrerequisite(decision.Reason)
 				}
