@@ -30,6 +30,7 @@ func (uh *UserHome) createRecoveryPage() (*adw.ToolbarView, *adw.PreferencesPage
 	headerBar := adw.NewHeaderBar()
 	backButton := gtk.NewButtonFromIconName("go-previous-symbolic")
 	backButton.SetTooltipText("Back to Maintenance")
+	SetAccessibleLabel(backButton, "Back to Maintenance")
 	backClickedCb := func(gtk.Button) {
 		if uh.closeRecoveryDetail != nil {
 			uh.closeRecoveryDetail()

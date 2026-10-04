@@ -12,9 +12,9 @@ Feature: Livery
   Scenario: Restoring a saved configuration on load writes nothing
     Given ChairLift is running
     When I open the "Livery" page
-    Then the "Customize the App Grid Icon" switch in the Livery "App Launcher Icon" section is on
+    Then the "Customize the App Launcher Icon" switch in the Livery "App Launcher Icon" section is on
     And the "Brand" row in the Livery "App Launcher Icon" section says "GitLab"
-    And the "Customize the Panel Icon" switch in the Livery "Top Bar Icon" section is on
+    And the "Customize the Top Bar Icon" switch in the Livery "Top Bar Icon" section is on
     And the "Mark" row in the Livery "Top Bar Icon" section says "GNOME Foundation"
     And the "Rotate at Login" switch in the Livery "Top Bar Icon" section is on
     And the "Customize the Files Icon" switch in the Livery "Files Icon" section is on
@@ -32,7 +32,7 @@ Feature: Livery
     When I open the "Livery" page
     Then the Livery page has finished loading
     And the Livery sections put App Launcher before Top Bar and Files last
-    And the "Customize the Panel Icon" switch in the Livery "Top Bar Icon" section is off
+    And the "Customize the Top Bar Icon" switch in the Livery "Top Bar Icon" section is off
     And the "Mark" row in the Livery "Top Bar Icon" section says "Cloud Native Computing Foundation"
     And the "Mark" row in the Livery "Top Bar Icon" section is insensitive
     And the "Rotate at Login" switch in the Livery "Top Bar Icon" section is insensitive
@@ -54,13 +54,13 @@ Feature: Livery
   Scenario: Turning the panel mark on installs the default mark as a dry run
     Given ChairLift is running
     When I open the "Livery" page
-    And I toggle the "Customize the Panel Icon" switch in the Livery "Top Bar Icon" section
+    And I toggle the "Customize the Top Bar Icon" switch in the Livery "Top Bar Icon" section
     Then the Livery dry run would set saved-panel-icon to ""
     And the Livery dry run would set panel-enabled to true
     And the Livery dry run would install the "chairlift-livery-cncf-symbolic" icon in the "hicolor" theme
     And the Livery dry run would point the panel at "chairlift-livery-cncf-symbolic"
-    And the "Customize the Panel Icon" switch in the Livery "Top Bar Icon" section is off
-    And the "Customize the Panel Icon" switch in the Livery "Top Bar Icon" section is sensitive
+    And the "Customize the Top Bar Icon" switch in the Livery "Top Bar Icon" section is off
+    And the "Customize the Top Bar Icon" switch in the Livery "Top Bar Icon" section is sensitive
     And the "Mark" row in the Livery "Top Bar Icon" section is insensitive
     And the "Rotate at Login" switch in the Livery "Top Bar Icon" section is insensitive
     And no Livery command changed any setting
@@ -71,7 +71,7 @@ Feature: Livery
   Scenario: A panel icon the user set themselves is kept for revert
     Given ChairLift is running
     When I open the "Livery" page
-    And I toggle the "Customize the Panel Icon" switch in the Livery "Top Bar Icon" section
+    And I toggle the "Customize the Top Bar Icon" switch in the Livery "Top Bar Icon" section
     Then the Livery dry run would set saved-panel-icon to "starred-symbolic"
     And the Livery page ran "dconf read -d /org/gnome/shell/extensions/custom-command-list/menuicon-setting"
     And the Livery dry run would point the panel at "chairlift-livery-cncf-symbolic"

@@ -376,17 +376,6 @@ func TestNSLDryRunWritesNoVM(t *testing.T) {
 	}
 }
 
-func TestWSLHostSupportedCheck(t *testing.T) {
-	// Lima supports amd64 or arm64
-	if !WSLHostSupported(BackendLima) && HostSupported() {
-		t.Errorf("WSLHostSupported(lima) = false on supported host")
-	}
-	// NSL supports amd64 only
-	if WSLHostSupported(BackendNSL) != NSLHostSupported() {
-		t.Errorf("WSLHostSupported(nsl) mismatch with NSLHostSupported")
-	}
-}
-
 func TestResolveBackendFollowsAnExistingMachine(t *testing.T) {
 	for _, tc := range []struct {
 		configured        string

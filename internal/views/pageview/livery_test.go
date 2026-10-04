@@ -36,6 +36,9 @@ func TestUnknownSelectionFallsBackToTheDefault(t *testing.T) {
 // Files mark is shared by every surface GNOME draws that application on, and
 // a subtitle mentioning only the dock would understate what the switch does.
 func TestAppGridTextCoversGNOMEAndPlasmaAvailability(t *testing.T) {
+	if got := LiveryAppGridRow().Title; got != "Customize the App Launcher Icon" {
+		t.Errorf("app-grid title = %q, want %q", got, "Customize the App Launcher Icon")
+	}
 	subtitle := strings.ToLower(LiveryAppGridRow().Subtitle)
 	for _, desktop := range []string{"gnome", "kickoff", "kde plasma"} {
 		if !strings.Contains(subtitle, desktop) {
@@ -51,6 +54,15 @@ func TestAppGridTextCoversGNOMEAndPlasmaAvailability(t *testing.T) {
 }
 
 func TestDockRowNamesItsFullReach(t *testing.T) {
+	if got := LiveryPanelRow().Title; got != "Customize the Top Bar Icon" {
+		t.Errorf("panel title = %q, want %q", got, "Customize the Top Bar Icon")
+	}
+	if strings.Contains(LiveryPanelRow().Subtitle, "colour") {
+		t.Errorf("panel subtitle contains British spelling 'colour': %q", LiveryPanelRow().Subtitle)
+	}
+	if strings.Contains(LiveryDockRow().Subtitle, "colour") {
+		t.Errorf("dock subtitle contains British spelling 'colour': %q", LiveryDockRow().Subtitle)
+	}
 	subtitle := strings.ToLower(LiveryDockRow().Subtitle)
 	for _, surface := range []string{"dock", "app grid", "window switcher"} {
 		if !strings.Contains(subtitle, surface) {

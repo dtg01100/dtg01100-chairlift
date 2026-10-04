@@ -104,14 +104,13 @@ func (uh *UserHome) onPowerwashClicked(button *gtk.Button, row *adw.ActionRow) {
 	dialog.AddResponse("confirm", "Remove Everything")
 	dialog.SetResponseAppearance("confirm", adw.ResponseDestructiveValue)
 
-	responseCb := func(_ adw.AlertDialog, response string) {
+	uh.recoveryDialogs.connect(dialog, func(response string) {
 		if response != "confirm" {
 			uh.powerwashGate.Reset()
 			return
 		}
 		uh.runPowerwash(button, row)
-	}
-	dialog.ConnectResponse(&responseCb)
+	})
 	dialog.Present(&uh.recoveryPrefsPage.Widget)
 }
 
@@ -166,14 +165,13 @@ func (uh *UserHome) onFactoryResetClicked(button *gtk.Button, row *adw.ActionRow
 	dialog.AddResponse("confirm", "Factory Reset")
 	dialog.SetResponseAppearance("confirm", adw.ResponseDestructiveValue)
 
-	responseCb := func(_ adw.AlertDialog, response string) {
+	uh.recoveryDialogs.connect(dialog, func(response string) {
 		if response != "confirm" {
 			uh.factoryResetGate.Reset()
 			return
 		}
 		uh.runFactoryReset(button, row)
-	}
-	dialog.ConnectResponse(&responseCb)
+	})
 	dialog.Present(&uh.recoveryPrefsPage.Widget)
 }
 

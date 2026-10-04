@@ -216,6 +216,7 @@ func newBundleRow(bundle homebrew.Bundle) (*adw.ActionRow, *gtk.Button, *gtk.Pro
 	collection := bundleview.Describe(bundle.Name, bundle.Description, bundle.ItemCount)
 	row := adw.NewActionRow()
 	row.SetTitle(collection.Title)
+	row.SetUseMarkup(false)
 	row.SetSubtitle(collection.Subtitle)
 
 	installBtn := gtk.NewButtonWithLabel("Install")
@@ -634,9 +635,13 @@ func (uh *UserHome) loadFlatpakApplications() {
 			uninstallBtn.SetValign(gtk.AlignCenterValue)
 			uninstallBtn.AddCssClass("destructive-action")
 			if isUser {
-				uninstallBtn.SetTooltipText("Remove this app from your account")
+				tooltip := "Remove this app from your account"
+				uninstallBtn.SetTooltipText(tooltip)
+				SetAccessibleLabel(uninstallBtn, tooltip)
 			} else {
-				uninstallBtn.SetTooltipText("Remove for everyone — asks for your admin password")
+				tooltip := "Remove for everyone — asks for your admin password"
+				uninstallBtn.SetTooltipText(tooltip)
+				SetAccessibleLabel(uninstallBtn, tooltip)
 			}
 
 			appID := app.ApplicationID

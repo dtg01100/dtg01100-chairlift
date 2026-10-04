@@ -51,8 +51,7 @@ func PublishedVersionsSummary(count int, stream string) string {
 // page's Published versions list.
 type PublishedVersion struct {
 	Row
-	Day     string
-	Running bool
+	Day string
 }
 
 // PublishedVersions returns one row per day the registry lists a build of
@@ -91,8 +90,7 @@ func PublishedVersions(builds []registrytags.Build, stream, running, previous st
 				Title:    build.Date.Format("2 January 2006"),
 				Subtitle: subtitle,
 			},
-			Day:     build.Date.Format("20060102"),
-			Running: runningNow,
+			Day: build.Date.Format("20060102"),
 		})
 	}
 	return rows
