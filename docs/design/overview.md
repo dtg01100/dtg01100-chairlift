@@ -89,14 +89,14 @@ this inventory, independently of the original YAML namespace names.
 | --- | --- | --- |
 | Updates | `updates_page.go` | Aggregate updates, provider detail, automatic updates, channel/graphics controls and system version |
 | Apps | `applications_page.go` | Collections, installed Flatpaks, Homebrew inventory/search/export and external catalog launch |
-| Agents | `agents_page.go` | Agent Mode using llmman |
+| Agents | `agents_page.go` | Agent Mode using llmman, Goose Desktop launch with verified Linux diagnostics, and Contribute to Bluefin |
 | Features | `features_page.go` (+ `printers_page.go`) | Distribution features, Developer Mode, Gaming Mode, and Printers |
-| Livery | `livery_page.go` | Profile picture and app-grid, panel and Files icon surfaces |
+| Livery | `livery_page.go` | Profile Picture, App Launcher Icon, Top Bar Icon, and Files Icon surfaces |
 | Maintenance | `maintenance_page.go` | Free up space, administrator scripts and Recovery entry |
 | Help | `help_page.go` | Troubleshooting, support links and capability explanations |
 
 Recovery is an existing detail built by `recovery.go` and reached from
-Maintenance, with rollback, published-version reads and opt-in reset controls.
+Maintenance, with rollback, published-version reads with pin and return-to-stream actions, and opt-in reset controls.
 There is no current System primary page or `system_page.go` implementation.
 
 ### Architecture route map
@@ -161,7 +161,7 @@ The *startup* path must not probe update providers on the main thread. The statu
 
 ### bootc boot gate
 
-bootc-related UI groups (system page's `bootc_status_group` and updates page's `bootc_updates_group`) are gated on `bootc.IsBootcBootedCached()`, which reads status once (via `sync.Once`) and reports true only when a booted deployment is found. On a composefs host (the `composefs=` kernel argument) status comes from world-readable deployment state, because bootc 1.16 refuses `bootc status` without root (#381); elsewhere it runs `bootc status --format json`. This is deliberately not a sentinel-file check: `/run/ostree-booted` is absent on snow's composefs-based deployments, so relying on it would hide the groups on every snow bootc host. `bootc status` itself exits 0 with a null `booted` entry on non-bootc hosts, so the gate must inspect the JSON body rather than the exit code.
+bootc-related UI groups (updates page's `bootc_status_group` and `bootc_updates_group`) are gated on `bootc.IsBootcBootedCached()`, which reads status once (via `sync.Once`) and reports true only when a booted deployment is found. On a composefs host (the `composefs=` kernel argument) status comes from world-readable deployment state, because bootc 1.16 refuses `bootc status` without root (#381); elsewhere it runs `bootc status --format json`. This is deliberately not a sentinel-file check: `/run/ostree-booted` is absent on snow's composefs-based deployments, so relying on it would hide the groups on every snow bootc host. `bootc status` itself exits 0 with a null `booted` entry on non-bootc hosts, so the gate must inspect the JSON body rather than the exit code.
 
 ### Native desktop settings module
 
@@ -1301,7 +1301,7 @@ message match `context.DeadlineExceeded` / `context.Canceled` under
 
 ### bootc progress UI (updates page)
 
-`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine through `stageProgressSink` — `EventMessage` lines are batched by `internal/views/progresslog` and rendered into a log expander with their arrival timestamps, capped at the most recent `progresslog.DefaultLimit` rows, and `EventComplete` flushes the last batch and marks the activity complete. A returned `stageErr` drives the error subtitle and toast after the stream closes; there is no duplicate error event. After `wg.Wait()`, the handler re-reads live `bootc.GetStatus()` and calls `SetObserved` for the badge: a successful read replaces the count, while a failed read preserves the last known count and shows a verification error instead of falsely claiming the image is current. The completion toast uses `actionmsg.BootcStage(dryrun.Enabled(), staged)` only when status is known — an explicit preview under dry-run instead of claiming a preview click staged anything. The system page has a separate read-only `loadBootcStatus` path for the booted/staged/rollback deployments; staging controls live on the Updates page.
+`onBootcStageClicked()` (`internal/views/updates_page.go`) drives the "System Update" expander: it disables the button, spawns `bootc.StageUpdate` in a goroutine, and processes the `ProgressEvent` channel on a second goroutine through `stageProgressSink` — `EventMessage` lines are batched by `internal/views/progresslog` and rendered into a log expander with their arrival timestamps, capped at the most recent `progresslog.DefaultLimit` rows, and `EventComplete` flushes the last batch and marks the activity complete. A returned `stageErr` drives the error subtitle and toast after the stream closes; there is no duplicate error event. After `wg.Wait()`, the handler re-reads live `bootc.GetStatus()` and calls `SetObserved` for the badge: a successful read replaces the count, while a failed read preserves the last known count and shows a verification error instead of falsely claiming the image is current. The completion toast uses `actionmsg.BootcStage(dryrun.Enabled(), staged)` only when status is known — an explicit preview under dry-run instead of claiming a preview click staged anything. The Updates page has a separate read-only `loadBootcStatus` path for the booted/staged/rollback deployments; staging controls live on the same page under System updates.
 
 ### Update badge tracking
 
@@ -1335,7 +1335,8 @@ The fourteen ublue commands include fixed `kvm-enable`, `docker-enable`, and
 `docker-disable` actions alongside pin/unpin. The parser accepts no arbitrary
 account, service, image or command argv. Developer options stay visible when
 their installed actions are missing, with the affected switches insensitive.
-Lima requires accessible `/dev/kvm`; a new permission grant needs a new login.
+WSL Mode defaults to nsl with Lima as an alternative backend; both require
+accessible `/dev/kvm`; a new permission grant needs a new login.
 Docker reports ready only with an accessible live daemon socket. IDE/editor
 installs are selective and contain one JetBrains Toolbox entry.
 
@@ -1355,7 +1356,8 @@ accepts only `enable-feature <name> [--dry-run]`, `disable-feature <name>
 [--dry-run]`, `restart [--dry-run]`, `rollback [--dry-run]`,
 `auto-updates-enable [--dry-run]`, `auto-updates-disable [--dry-run]`,
 `driver-switch <standard|nvidia|nvidia-open> [--dry-run]`, `factory-reset
-[--dry-run]`, `pin <YYYYMMDD> [--dry-run]`, and `unpin [--dry-run]`. A bare, `$PATH`-resolved command name can resolve to a different
+[--dry-run]`, `pin <YYYYMMDD> [--dry-run]`, `unpin [--dry-run]`,
+`kvm-enable [--dry-run]`, `docker-enable [--dry-run]`, and `docker-disable [--dry-run]`. A bare, `$PATH`-resolved command name can resolve to a different
 absolute path depending on the invoking process's `$PATH`, which makes the
 path comparison miss and falls `pkexec` back to the generic, more restrictive
 action. The wrapper packages therefore always invoke their fixed `HelperPath`
@@ -1380,12 +1382,14 @@ argv, marked as `suppressed: "dry-run"` in preview mode or `suppressed: "no"`
 for live attempts. After a live command returns, `helperexec.Run` records the
 execution outcome (`journal.RecordOutcome`) with `outcome` in `succeeded`,
 `refused` (PolicyKit authentication dismissed or denied with pkexec exit status
-126 or 127), `failed` (other non-zero exit with exit code), `timed-out`, or
-`cancelled`. Before executing a derived privileged command (such as a concrete
-`bootc switch` target), `cmd/chairlift-helper` prints a machine-readable line
-(`chairlift-helper: exec <argv json>`); `helperexec.Run` parses this line from
-output, strips it from caller-visible stdout/stderr, and includes the concrete
-argv list as `executed` (`[][]string`) in the journal outcome record.
+126, or 127 when not an unexecutable helper execution error), `failed` (other
+non-zero exit with exit code, including a missing or unexecutable helper),
+`timed-out`, or `cancelled`. Before executing a derived privileged command
+(such as a concrete `bootc switch` target), `cmd/chairlift-helper` prints a
+machine-readable line (`chairlift-helper: exec <argv json>`); `helperexec.Run`
+parses this line from output, strips it from caller-visible stdout/stderr, and
+includes the concrete argv list as `executed` (`[][]string`) in the journal
+outcome record.
 
 Gaming mode, the third Bluefin-family feature, crosses no privilege boundary
 at all: every component is a user-scope Flatpak installed with
@@ -2014,8 +2018,9 @@ neither a row nor an accelerator: `Shortcuts` and `Bindings` skip it
 structurally, so a detail can never be advertised or registered by accident.
 Recovery is the live detail. It is a content-stack child of Maintenance, whose
 row stays selected while it is shown, and it draws on two configuration
-namespaces at once — `bootc_updates_group` on `updates_page` for its rollback
-controls and `reset_group` on `maintenance_page` for its reset controls — which
+namespaces at once — `bootc_updates_group` on `updates_page` for its rollback,
+pin, and return-to-stream controls and `reset_group` on `maintenance_page` for its
+Powerwash and Factory Reset controls — which
 is why a route's refs are `{Page, Group}` pairs rather than one page field per
 route. `navigation.VisibleRoutes` returns the visible primaries followed by the
 details whose own refs are enabled and whose ancestor is itself visible; a

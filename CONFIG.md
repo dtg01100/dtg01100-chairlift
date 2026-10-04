@@ -73,7 +73,7 @@ two surviving groups to `updates_page` and remove `system_page` when convenient.
 
 ### Agents Page (`agents_page`)
 
-- `agents_group`: Agent Mode — llmman installed with Homebrew and served as a systemd user unit on `127.0.0.1:17434` in the invoking user's own account; shown where Homebrew is present. Nothing here crosses a privilege boundary. It has no options beyond `enabled`.
+- `agents_group`: Agent Mode — llmman installed with Homebrew and served as a systemd user unit on `127.0.0.1:17434` in the invoking user's own account; shown where Homebrew is present. Nothing here crosses a privilege boundary. It has no options beyond `enabled`. The page also presents Goose Desktop launch with verified Linux diagnostic tools, the "Show Ask Bluefin in menu" shortcut preference, and Contribute to Bluefin via `ujust contribute`.
 
 ### Updates Page (`updates_page`)
 
@@ -116,7 +116,7 @@ two surviving groups to `updates_page` and remove `system_page` when convenient.
     - `script`: Absolute path to the script to execute. Required when `sudo: true`.
     - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec). `sudo: true` is accepted only from trusted `/etc/chairlift/config.yml` or `/usr/share/chairlift/config.yml` configurations. The rule is applied to the effective configuration, so an untrusted file may not enable a group whose actions include a privileged one, even when it inherits that action from the built-in defaults rather than declaring `sudo: true` itself.
 - `maintenance_freespace_group`: One routine cleanup action composing the shared post-update maintenance runner; removes cached downloads and unused supporting software, never installed apps, documents, or containers
-- `reset_group`: Powerwash (removes user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`) utilities (disabled by default)
+- `reset_group`: Recovery utilities (disabled by default); gates Powerwash (removes user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`). Recovery also offers Roll Back and Published versions with Pin and Return to stream.
 
 ### Features Page (`features_page`)
 
@@ -127,7 +127,7 @@ two surviving groups to `updates_page` and remove `system_page` when convenient.
   - `install_pulp`: After a confirmed enable, install the Pulp feed reader (`org.gnome.gitlab.cheywood.Pulp`) as a user-scope Flatpak. Defaults to `false`. Unprivileged and opt-in: it installs for the invoking account only, and a failure here is reported as its own failure rather than rolling back developer access
   - `stage_feeds`: After a confirmed enable, write the curated developer feed catalog to `~/.local/share/chairlift/developer-feeds.opml` so the user can import it into their reader. Defaults to `false`. ChairLift writes the file and stops — nothing is imported automatically, and Pulp's own database is never touched. Disabling Developer Mode never removes Pulp, the staged file, or anything already imported from it
 - `gaming_group`: Selective Gaming applications and runtime extensions, with installed user/system states, preserved system entries and visible partial failures (shown only when `/usr/share/ublue-os/image-info.json` is present)
-- `printers_group`: Printer applications; one switch per driver family (Ghostscript, HPLIP, Gutenprint), each a rootless Podman quadlet under `~/.config/containers/systemd` driven with `systemctl --user`, with no `pkexec` route (shown only when `podman` is on `$PATH`). A family can be turned on only when its image's web administration can be authenticated or disabled ([ADR-0016](docs/adr/0016-printer-app-admin-denied-until-authenticated.md)); until the published images accept that setting, every switch is shown locked and says so
+- `printers_group`: Printer applications; one switch per driver family (Ghostscript, HPLIP, Gutenprint), each a rootless Podman quadlet under `~/.config/containers/systemd` driven with `systemctl --user`, with no `pkexec` route (shown only when `podman` is on `$PATH`). A family can be turned on only when its image's web administration can be authenticated or disabled ([ADR-0016](docs/adr/0016-printer-app-admin-denied-until-authenticated.md)); until the published images accept that setting, every switch is shown locked and says so. The rows evaluate systemd state, journal logs, and container images to diagnose and surface actionable failures (device access, image availability, plugin verification, service crash) rather than a false enabled indicator
 
 The Developer group also offers WSL Mode (nsl by default, with Lima as alternative), Docker, and individually
 selected IDEs and terminal editors, with one JetBrains Toolbox entry. Missing

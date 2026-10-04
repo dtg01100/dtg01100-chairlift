@@ -119,7 +119,7 @@ to ChairLift's log, which is where to look when filing a bug report.
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| Agent Mode | `agents_group` | llmman installed with Homebrew and served as the systemd user unit `chairlift-llmman.service` on `127.0.0.1:17434`, with `OLLAMA_HOST` published to new sessions through `~/.config/environment.d/10-chairlift-llmman.conf`. Installs no chat client; Goose setup is on Help. Crosses no privilege boundary, so it has no `pkexec` route. Hidden where Homebrew is absent. See [ADR-0015](adr/0015-agent-mode-llmman.md) |
+| Agent Mode | `agents_group` | llmman installed with Homebrew and served as the systemd user unit `chairlift-llmman.service` on `127.0.0.1:17434`, with `OLLAMA_HOST` published to new sessions through `~/.config/environment.d/10-chairlift-llmman.conf`. Offers Goose Desktop (`ublue-os/tap/goose-linux`) launched via `llmman launch goose-desktop --model <active-model>` with verified Linux MCP diagnostic tools, "Show Ask Bluefin in menu" shortcut preference, and Contribute to Bluefin via `ujust contribute`. Crosses no privilege boundary, so it has no `pkexec` route. Hidden where Homebrew is absent. See [ADR-0015](adr/0015-agent-mode-llmman.md) |
 
 ### Features Page (`features_page`)
 
@@ -129,9 +129,10 @@ to ChairLift's log, which is where to look when filing a bug report.
 | Features | `features_group` | Toggle system features managed by updex |
 | Developer Mode | `dx_group` | Adds the invoking account to container, VM, and serial-device groups; a confirmed live enable also opens the three developer onboarding tabs and, when configured, runs the optional feed setup below. Shown only when `/usr/share/ublue-os/image-info.json` is present |
 | Gaming Mode | `gaming_group` | Selectively installs/removes chosen user-scope Flatpak applications and runtime extensions, reports installed scopes and persistent partial failures, and preserves system-scope entries; shown only when `/usr/share/ublue-os/image-info.json` is present |
-| Printers | `printers_group` | Printer applications: one switch per driver family (Ghostscript, HPLIP, Gutenprint), each a rootless Podman quadlet under `~/.config/containers/systemd` driven with `systemctl --user`. Crosses no privilege boundary, so it has no `pkexec` route. Hidden where `podman` is absent. A family may be turned on only when its web administration is authenticated or absent ([ADR-0016](adr/0016-printer-app-admin-denied-until-authenticated.md)); until the published images accept that setting every switch is locked and the row says what is needed |
+| Printers | `printers_group` | Printer applications: one switch per driver family (Ghostscript, HPLIP, Gutenprint), each a rootless Podman quadlet under `~/.config/containers/systemd` driven with `systemctl --user`. Crosses no privilege boundary, so it has no `pkexec` route. Hidden where `podman` is absent. A family may be turned on only when its web administration is authenticated or absent ([ADR-0016](adr/0016-printer-app-admin-denied-until-authenticated.md)); until the published images accept that setting every switch is locked and the row says what is needed. The rows evaluate systemd state, journal logs, and container images to diagnose and surface actionable failures (device access, image availability, plugin verification, service crash) rather than a false enabled indicator |
 
-Developer options include Ubuntu LTS in Lima (**WSL Mode**), the base image's
+Developer options include WSL Mode (persistent Linux machines in systemd-vmspawn
+via nsl by default, or Ubuntu LTS in Lima), the base image's
 Docker daemon, and individually chosen IDEs/editors with one JetBrains Toolbox
 entry. Missing fixed helper actions keep affected switches discoverable but
 insensitive. KVM permission requires a new login; Docker readiness requires
@@ -139,10 +140,11 @@ the real daemon socket to be accessible, not just installed CLI tools. These
 privileged operations use only `kvm-enable`, `docker-enable`, and
 `docker-disable` with fixed argv and the account derived from `PKEXEC_UID`.
 
-`dx_group` supports two optional, default-off steps that run off the GTK main
+`dx_group` supports optional steps that run off the GTK main
 thread after a confirmed live enable, and never on a disable, a page restore, a
 failed helper call, or a `--dry-run` preview:
 
+- `wsl_backend` — backend for WSL Mode: `nsl` (default) or `lima`
 - `install_pulp` — installs the Pulp feed reader (`org.gnome.gitlab.cheywood.Pulp`) as a user-scope Flatpak from Flathub. No `pkexec`, no root: the same unprivileged posture as gaming mode
 - `stage_feeds` — writes the curated catalog to `~/.local/share/chairlift/developer-feeds.opml` and says so in a toast that names the path. Importing it is the user's own action inside Pulp; ChairLift never writes to Pulp's sandboxed store and never claims a subscription was imported
 
@@ -196,7 +198,7 @@ pair and unit file, and dry-run restores both switches without writes.
 |-------|-----|-------------|
 | Storage | `maintenance_freespace_group` | The single "Free up space" action: `brew cleanup` plus `flatpak uninstall --unused`. The same key gates the post-update maintenance step of an update run, so cleanup cannot be on in one place and off in the other |
 | Maintenance tasks | `maintenance_cleanup_group` | Administrator-configured scripts, listed separately and never folded into "Free up space" (disabled by default) |
-| Recovery | `reset_group` | Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`); irreversible actions disabled by default |
+| Recovery | `reset_group` | Recovery utilities: Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Recovery also offers Roll Back and Published versions with Pin and Return to stream |
 
 `maintenance_cleanup_group` supports:
 

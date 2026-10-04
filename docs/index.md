@@ -23,10 +23,10 @@ Control Center provides seven configurable pages, in sidebar order:
 |------|-------------|
 | **Updates** | Update everything in one action or per provider: stage bootc system updates, apply Flatpak updates, upgrade Homebrew packages, trust Homebrew taps, read the booted/staged system version, and switch release channel or graphics-driver variant. |
 | **Apps** | Search/install Homebrew formulae and casks; uninstall installed formulae/casks; pin/unpin formulae; install curated app collections. List/uninstall Flatpaks and launch the configured external manager for Flatpak discovery and installation. |
-| **Agents** | Agent Mode: run a language model on this computer — llmman, installed with Homebrew and served as a systemd user unit in your own account. |
-| **Features** | Distribution features, Developer Mode, WSL Mode through Lima, Docker, individually chosen IDEs/editors, selective Gaming, and safely locked printer applications. |
-| **Livery** | Choose the marks shown on the app-grid button, the top-bar menu, and Files. |
-| **Maintenance** | Free up space, run administrator-configured maintenance scripts, and — when an administrator opts in — Powerwash or Factory Reset. |
+| **Agents** | Agent Mode: run a language model on this computer (llmman), launch Goose Desktop with verified Linux tools, and contribute to Bluefin. |
+| **Features** | Distribution features, Developer Mode, WSL Mode (nsl or Lima), Docker, individually chosen IDEs/editors, selective Gaming, and safely locked printer applications. |
+| **Livery** | Choose your profile picture and the marks shown on the app launcher button, the top-bar menu, and Files. |
+| **Maintenance** | Free up space, run administrator-configured maintenance scripts, and — when an administrator opts in — Recovery (Roll Back, pin/return to stream, Powerwash, Factory Reset). |
 | **Help** | Enhanced Troubleshooting (an AI diagnostic assistant installed with Homebrew), plus links to the project website, issue tracker, and community documentation. |
 
 A functional page is omitted when all of its groups are disabled. Help is
@@ -47,6 +47,7 @@ always retained so the window always has a valid destination.
 |------|-------------|
 | `--dry-run`, `-d` | Run without making any changes to the system. Propagated to all package manager wrappers. |
 | `--first-run`, `--setup`, `-s` | Start the same explicit Features → Apps → Agents → Livery tour on existing page controls. A running tour retains its current step. Ordinary activation never starts setup. |
+| `--ask-bluefin` | Launch Goose Desktop with the active model when Agent Mode is ready, or open Control Center to the Agents page naming the missing requirement. |
 
 ## Optional Dependencies
 
