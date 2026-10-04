@@ -161,7 +161,13 @@ func (uh *UserHome) refreshDeveloperOptions(status ublue.Status) {
 						nslHostOk := devtools.NSLHostSupported()
 						actionable, isKVM := devtools.ParseNSLDoctor(doctorOutput)
 
-						if !nslHostOk {
+						if wsl.Running {
+							// Stopping a running machine needs no prerequisite.
+							item.canEnable = nslHostOk && nslInstalled
+							item.allowed = wslErr == nil
+							item.toggle.set(item.active)
+							item.row.SetSubtitle(wslSubtitle(backend, wsl, wslErr))
+						} else if !nslHostOk {
 							item.canEnable = false
 							item.allowed = false
 							item.toggle.set(item.active)
