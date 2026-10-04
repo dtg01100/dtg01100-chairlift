@@ -90,6 +90,8 @@ var unprivilegedExecSites = []execSite{
 	{File: "internal/autoupdate/autoupdate.go", Func: "systemctlOutput"},      // systemctl (query)
 	{File: "internal/bootc/bootc.go", Func: "getStatusFrom"},                  // bootc status (read-only)
 	{File: "internal/bootc/check.go", Func: "checkUpdateFrom"},                // bootc upgrade --check (read-only)
+	{File: "internal/contribute/contribute.go", Func: "Command"},              // xdg-terminal-exec
+	{File: "internal/contribute/contribute.go", Func: "RealProber"},           // ujust --summary (query)
 	{File: "internal/devmenu/devmenu.go", Func: "execCommand"},                // dconf
 	{File: "internal/devtools/devtools.go", Func: "command"},                  // limactl / systemctl read; privilege mutations dispatch through ublue.runHelper
 	{File: "internal/distrobox/distrobox.go", Func: "RemoveAll"},              // distrobox

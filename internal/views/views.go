@@ -277,6 +277,12 @@ type UserHome struct {
 	askBluefinToggle  *guardedSwitch
 	askBluefinGate    actionstate.Gate
 
+	// Contribute to Bluefin (agents_page)
+	contributeRow     *adw.ActionRow
+	contributeButton  *gtk.Button
+	contributeSpinner *gtk.Spinner
+	contributeGate    actionstate.Gate
+
 	// Powerwash / Factory Reset (maintenance_page reset_group)
 	powerwashGate    actionstate.Gate
 	factoryResetGate actionstate.Gate

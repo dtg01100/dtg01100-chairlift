@@ -1718,6 +1718,26 @@ both files stay and the UI says the service is still running. Binaries
 and models are never removed. Nothing is privileged, so there is no helper
 subcommand and no PolicyKit action.
 
+#### Contribute to Bluefin (`internal/contribute`)
+
+`internal/contribute` manages preflight and command construction for launching
+a contributor session from the Agents page. It launches Common's merged `ujust
+contribute` recipe through `xdg-terminal-exec`, running the foreground
+contributor container appliance.
+
+Preflight is pure, read-only, and executes off the GTK thread (`Preflight`):
+1. `xdg-terminal-exec` on `$PATH` to launch the terminal emulator.
+2. `ujust` on `$PATH`.
+3. `ujust --summary` containing the `contribute` recipe.
+4. `podman` on `$PATH`.
+5. Hive registration file present at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`.
+
+When any check fails, the row displays an actionable subtitle (including a link
+to registration setup when the registration file is missing) and leaves the
+action button insensitive. Ready actions invoke `launcher.Start`, reporting
+launch failures asynchronously through the UI toast surface. Previews under
+`--dry-run` log the launch command without opening a terminal or spawning a worker.
+
 ### Printers (`internal/printerapp`)
 
 `internal/printerapp` is the printer port of `internal/aistack`: one rootless

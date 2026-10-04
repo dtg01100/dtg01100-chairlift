@@ -159,3 +159,20 @@ Feature: Agents page
     When I open the "Agents" page
     Then every visible action control has an accessible name and an action
     And every visible toggle reports its state
+
+  @stub.agents.contribute.ready
+  Scenario: Contribute to Bluefin is ready when all preflight checks pass
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the "Contribute to Bluefin" row says "Run the Hive contributor appliance in a terminal."
+    And the "Contribute" button in the "Contribute to Bluefin" row is sensitive
+    When I click the "Contribute" button in the "Contribute to Bluefin" row
+    Then the application log contains "[DRY-RUN] would launch xdg-terminal-exec ujust contribute"
+    And I see "[DRY-RUN] Preview: would launch Contribute to Bluefin in a terminal"
+
+  @stub.agents.contribute.noreg
+  Scenario: Contribute to Bluefin explains missing Hive registration
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the "Contribute to Bluefin" row says "Register this machine first — see https://github.com/projectbluefin/contribute#configuration"
+    And the "Contribute" button in the "Contribute to Bluefin" row is insensitive
