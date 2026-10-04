@@ -80,3 +80,19 @@ func AgentModePresetsSubtitle() string {
 func AgentModeSwitchPresetLabel() string {
 	return "Choose…"
 }
+
+func GooseRowTitle() string {
+	return "Goose"
+}
+
+func GooseLaunchButtonLabel() string {
+	return "Launch"
+}
+
+func AskBluefinMenuRowTitle() string {
+	return "Show Ask Bluefin in menu"
+}
+
+func AskBluefinMenuRowSubtitle() string {
+	return "Show the Ask Bluefin shortcut in the top panel menu."
+}

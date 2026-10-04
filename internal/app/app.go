@@ -2,11 +2,13 @@
 package app
 
 import (
+	"context"
 	"log"
 	"os"
 	"time"
 	"unsafe"
 
+	"github.com/projectbluefin/chairlift/internal/agentmode"
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/imageinfo"
 	"github.com/projectbluefin/chairlift/internal/legacydesktop"
@@ -14,6 +16,7 @@ import (
 	"github.com/projectbluefin/chairlift/internal/window"
 
 	"github.com/frostyard/snowkit/gobj"
+	sgtk "github.com/frostyard/snowkit/gtk"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gio"
@@ -34,6 +37,11 @@ const optionFirstRun = "first-run"
 // the primary instance.
 const optionAgentMode = "agent-mode"
 
+// optionAskBluefin is the long name of the --ask-bluefin option, and with it the
+// key GLib uses for the option in the command-line dictionary it forwards to
+// the primary instance.
+const optionAskBluefin = "ask-bluefin"
+
 var (
 	gTypeApplication gobject.Type
 	appRegistry      *gobj.InstanceRegistry
@@ -42,9 +50,11 @@ var (
 // Application wraps the Adwaita Application as a proper GObject subtype
 type Application struct {
 	adw.Application
-	window             *window.Window
-	setupRequested     bool
-	agentModeRequested bool
+	window              *window.Window
+	setupRequested      bool
+	agentModeRequested  bool
+	askBluefinRequested bool
+	askBluefinReason    string
 }
 
 func init() {
@@ -150,7 +160,42 @@ func New() *Application {
 func (a *Application) onCommandLine(cl *gio.ApplicationCommandLine) int32 {
 	setup := commandLineRequestsSetup(cl)
 	agentMode := commandLineRequestsAgentMode(cl)
+	askBluefin := commandLineRequestsAskBluefin(cl)
 	running := a.window != nil
+
+	if askBluefin {
+		a.Hold()
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_, facts, _ := agentmode.ObserveLive(ctx)
+			decision := agentmode.Dispatch(facts)
+
+			sgtk.RunOnMainThread(func() {
+				defer a.Release()
+				if decision.Action == agentmode.DispatchLaunch {
+					launchErr := agentmode.Launch(decision.Model, func(asyncErr error) {
+						log.Printf("app: goose desktop exited with error: %v", asyncErr)
+					})
+					if launchErr == nil {
+						return
+					}
+					decision.Reason = "Failed to launch Goose Desktop."
+				}
+
+				a.askBluefinRequested = true
+				a.askBluefinReason = decision.Reason
+
+				a.Activate()
+
+				if a.window != nil {
+					a.window.NavigateToAgentsPage()
+					a.window.ShowMissingPrerequisite(decision.Reason)
+				}
+			})
+		}()
+		return 0
+	}
 
 	// Consumed by onActivate when this invocation is the one that creates the
 	// window, so an explicit request skips the disposition probe instead of
@@ -202,6 +247,20 @@ func commandLineRequestsAgentMode(cl *gio.ApplicationCommandLine) bool {
 	return opts.Contains(optionAgentMode)
 }
 
+// commandLineRequestsAskBluefin reports whether the invocation carried
+// --ask-bluefin. GLib keys the dictionary on the long option name, so the short
+// form needs no separate lookup.
+func commandLineRequestsAskBluefin(cl *gio.ApplicationCommandLine) bool {
+	if cl == nil {
+		return false
+	}
+	opts := cl.GetOptionsDict()
+	if opts == nil {
+		return false
+	}
+	return opts.Contains(optionAskBluefin)
+}
+
 // onActivate is called when the application is activated
 func (a *Application) onActivate() {
 	activateStart := time.Now()
@@ -224,8 +283,11 @@ func (a *Application) onActivate() {
 	a.setupKeyboardShortcuts(win.NavigationItems())
 	win.Present()
 	win.CheckFirstRun(a.setupRequested)
-	if a.agentModeRequested {
+	if a.agentModeRequested || a.askBluefinRequested {
 		win.NavigateToAgentsPage()
+		if a.askBluefinRequested && a.askBluefinReason != "" {
+			win.ShowMissingPrerequisite(a.askBluefinReason)
+		}
 	}
 	log.Printf("app: window presented in %s (since activate)", time.Since(activateStart))
 }
@@ -275,6 +337,14 @@ func (a *Application) registerOptions() {
 		glib.GOptionFlagNoneValue,
 		glib.GOptionArgNoneValue,
 		"Open the Agent Mode page.",
+		"",
+	)
+	a.AddMainOption(
+		optionAskBluefin,
+		0,
+		glib.GOptionFlagNoneValue,
+		glib.GOptionArgNoneValue,
+		"Launch Ask Bluefin (Goose) or open Agent Mode.",
 		"",
 	)
 }

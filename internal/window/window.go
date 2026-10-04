@@ -760,6 +760,14 @@ func (w *Window) NavigateToAgentsPage() {
 	w.navigateToPage(navigation.AgentModeRoute)
 }
 
+// ShowMissingPrerequisite shows an error toast naming the prerequisite preventing
+// Goose Desktop / Ask Bluefin from launching.
+func (w *Window) ShowMissingPrerequisite(reason string) {
+	if reason != "" {
+		w.ShowErrorToast(reason)
+	}
+}
+
 // CheckFirstRun never probes disposition or presents on ordinary activation.
 func (w *Window) CheckFirstRun(explicitSetup bool) {
 	if firstrun.ShouldPresent(explicitSetup) {
