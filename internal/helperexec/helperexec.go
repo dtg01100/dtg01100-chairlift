@@ -45,7 +45,6 @@
 package helperexec
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -228,9 +227,7 @@ func parseAndCleanExec(output, helperPath string) (string, [][]string) {
 	prefix := path.Base(helperPath) + ": exec "
 	var executed [][]string
 	var cleanLines []string
-	scanner := bufio.NewScanner(strings.NewReader(output))
-	for scanner.Scan() {
-		line := scanner.Text()
+	for _, line := range strings.Split(strings.TrimSuffix(output, "\n"), "\n") {
 		if strings.HasPrefix(line, prefix) || strings.HasPrefix(line, ubluehelper.HelperExecPrefix) {
 			idx := strings.Index(line, ": exec ")
 			if idx != -1 {

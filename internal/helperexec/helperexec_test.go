@@ -523,3 +523,15 @@ func TestRunJournalsOutcomeRefusedOnExit126(t *testing.T) {
 		t.Errorf("entry[1].ExitCode = %v, want 126", entries[1].ExitCode)
 	}
 }
+
+func TestParseAndCleanExecKeepsLinesAfterAnOverlongLine(t *testing.T) {
+	long := strings.Repeat("x", 100*1024)
+	output := long + "\nchairlift-helper: exec [\"bootc\",\"status\"]\nafter\n"
+	clean, executed := parseAndCleanExec(output, "/usr/bin/chairlift-helper")
+	if clean != long+"\nafter\n" {
+		t.Fatalf("clean output lost lines after an overlong line (len %d)", len(clean))
+	}
+	if len(executed) != 1 || executed[0][0] != "bootc" {
+		t.Fatalf("executed = %v, want one bootc command", executed)
+	}
+}

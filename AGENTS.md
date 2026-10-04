@@ -610,7 +610,11 @@ An agent must not break these:
   Mode defaults to nsl (persistent Linux machines inside systemd-vmspawn and
   QEMU/KVM) with Lima (Ubuntu LTS VM) as an alternative backend, both with an
   explicit `/dev/kvm` permission floor; the fixed `kvm-enable` action grants
-  access to the invoking account, effective after a new login. Docker uses the
+  access to the invoking account, effective after a new login. The backend
+  choice is not stored: `wsl_backend` sets the default, and the first read
+  follows an existing Lima machine when no nsl machine exists
+  (`devtools.ResolveBackend`). A running machine stays stoppable even when
+  the start prerequisites are unmet. Docker uses the
   fixed enable/disable actions for its system daemon and requires actual socket
   readiness for this session, not installed CLI tools alone. Missing installed
   helper actions leave the affected switches insensitive with an explanation

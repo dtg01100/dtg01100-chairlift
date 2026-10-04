@@ -321,6 +321,16 @@ func LimaStatus(ctx context.Context) (WSLState, error) {
 	return state, nil
 }
 
+// ResolveBackend returns the backend whose machine the user already has when
+// the configured default is nsl: an existing Lima machine and no nsl machine
+// means Lima. An administrator's explicit Lima is kept as is.
+func ResolveBackend(configured string, nslExists, limaExists bool) string {
+	if configured == BackendNSL && limaExists && !nslExists {
+		return BackendLima
+	}
+	return configured
+}
+
 // WSLStatus reads the status for the chosen backend (defaults to nsl).
 func WSLStatus(ctx context.Context, backend ...string) (WSLState, error) {
 	b := BackendNSL

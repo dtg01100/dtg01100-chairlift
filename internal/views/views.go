@@ -201,24 +201,25 @@ type UserHome struct {
 	// released as soon as the helper returns, while a user-scope Flatpak
 	// install keeps running off the main thread. Overlapping installs are
 	// refused by this gate, not by holding the switch insensitive.
-	developerFeedGate actionstate.Gate
-	gamingGroup       *adw.PreferencesGroup
-	gamingRow         *adw.ActionRow
-	gamingComponents  []*gamingComponentRow
-	gamingInstall     *gtk.Button
-	gamingRemove      *gtk.Button
-	gamingGate        actionstate.Gate
-	gamingButtons     buttonRoute
-	gamingDialogs     dialogRoute
-	developerOptions  []*developerOptionRow
-	developerButtons  buttonRoute
-	wslBackend        string
-	wslCombo          *adw.ComboRow
-	wslSuppress       bool
-	wslBackendNotify  func(gobject.Object, uintptr)
-	driverRow         *adw.ActionRow
-	driverButton      *gtk.Button
-	driverGate        actionstate.Gate
+	developerFeedGate  actionstate.Gate
+	gamingGroup        *adw.PreferencesGroup
+	gamingRow          *adw.ActionRow
+	gamingComponents   []*gamingComponentRow
+	gamingInstall      *gtk.Button
+	gamingRemove       *gtk.Button
+	gamingGate         actionstate.Gate
+	gamingButtons      buttonRoute
+	gamingDialogs      dialogRoute
+	developerOptions   []*developerOptionRow
+	developerButtons   buttonRoute
+	wslBackend         string
+	wslCombo           *adw.ComboRow
+	wslSuppress        bool
+	wslBackendResolved bool
+	wslBackendNotify   func(gobject.Object, uintptr)
+	driverRow          *adw.ActionRow
+	driverButton       *gtk.Button
+	driverGate         actionstate.Gate
 
 	// Staged-update changelog (SBOM diff), with visible Compare and optional
 	// result details in the system-update secondary group.

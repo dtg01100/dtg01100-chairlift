@@ -58,7 +58,7 @@ func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ub
 		if choice.kind == "wsl" {
 			combo := adw.NewComboRow()
 			combo.SetTitle("WSL Backend")
-			combo.SetSubtitle("Choose nsl (default) or Lima for virtual machines.")
+			combo.SetSubtitle("Choose nsl (default) or Lima for virtual machines. An existing Lima machine selects Lima.")
 			combo.SetModel(gtk.NewStringList([]string{"nsl (default)", "Lima"}))
 			uh.wslSuppress = true
 			if uh.wslBackend == devtools.BackendLima {
@@ -115,6 +115,7 @@ func (uh *UserHome) refreshDeveloperOptions(status ublue.Status) {
 	}
 	uh.setDeveloperSensitive(false)
 	backend := uh.wslBackend
+	resolve := !uh.wslBackendResolved
 	go func() {
 		ctx, cancel := ublue.DefaultContext()
 		defer cancel()
@@ -122,6 +123,14 @@ func (uh *UserHome) refreshDeveloperOptions(status ublue.Status) {
 		var wslErr error
 		var doctorOutput string
 		var doctorErr error
+		if backend == devtools.BackendNSL && resolve {
+			// The backend choice is not stored: an existing Lima machine with
+			// no nsl machine means the user chose Lima, so the first read
+			// follows it instead of resetting to the default.
+			nsl, nslErr := devtools.NSLStatus(ctx)
+			lima, limaErr := devtools.LimaStatus(ctx)
+			backend = devtools.ResolveBackend(backend, nslErr == nil && nsl.Exists, limaErr == nil && lima.Exists)
+		}
 		if backend == devtools.BackendLima {
 			wsl, wslErr = devtools.LimaStatus(ctx)
 		} else {
@@ -136,6 +145,17 @@ func (uh *UserHome) refreshDeveloperOptions(status ublue.Status) {
 		casks, caskErr := homebrew.ListInstalledCasks()
 		sgtk.RunOnMainThread(func() {
 			defer uh.developerGate.Reset()
+			if resolve {
+				uh.wslBackendResolved = true
+				if backend != uh.wslBackend {
+					uh.wslBackend = backend
+					if uh.wslCombo != nil {
+						uh.wslSuppress = true
+						uh.wslCombo.SetSelected(1)
+						uh.wslSuppress = false
+					}
+				}
+			}
 			brew := uh.capabilities[capability.Homebrew]
 			for _, item := range uh.developerOptions {
 				switch item.kind {

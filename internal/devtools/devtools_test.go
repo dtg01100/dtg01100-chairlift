@@ -386,3 +386,20 @@ func TestWSLHostSupportedCheck(t *testing.T) {
 		t.Errorf("WSLHostSupported(nsl) mismatch with NSLHostSupported")
 	}
 }
+
+func TestResolveBackendFollowsAnExistingMachine(t *testing.T) {
+	for _, tc := range []struct {
+		configured        string
+		nslExists, limaOK bool
+		want              string
+	}{
+		{BackendNSL, false, false, BackendNSL},
+		{BackendNSL, false, true, BackendLima},
+		{BackendNSL, true, true, BackendNSL},
+		{BackendLima, true, false, BackendLima},
+	} {
+		if got := ResolveBackend(tc.configured, tc.nslExists, tc.limaOK); got != tc.want {
+			t.Errorf("ResolveBackend(%q, %v, %v) = %q, want %q", tc.configured, tc.nslExists, tc.limaOK, got, tc.want)
+		}
+	}
+}
