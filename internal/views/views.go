@@ -276,6 +276,8 @@ type UserHome struct {
 	askBluefinMenuRow *adw.ActionRow
 	askBluefinToggle  *guardedSwitch
 	askBluefinGate    actionstate.Gate
+	askBluefinMapped  func(gtk.Widget)
+	askBluefinProbed  bool
 
 	// Contribute to Bluefin (agents_page)
 	contributeRow     *adw.ActionRow

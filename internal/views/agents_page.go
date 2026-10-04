@@ -102,22 +102,31 @@ func (uh *UserHome) buildAgentModeGroup(page *adw.PreferencesPage) {
 	group.Add(&address.Widget)
 	page.Add(group)
 
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		avail, vis, err := devmenu.AskBluefinState(ctx)
-		sgtk.RunOnMainThread(func() {
-			if uh.askBluefinMenuRow == nil || uh.askBluefinToggle == nil {
-				return
-			}
-			if err != nil || !avail {
-				uh.askBluefinToggle.widget.SetSensitive(false)
-				return
-			}
-			uh.askBluefinToggle.set(vis)
-			uh.askBluefinToggle.widget.SetSensitive(true)
-		})
-	}()
+	// The menu entry is read the first time the Agents page is shown, not
+	// at window build: opening another page must not touch dconf.
+	uh.askBluefinMapped = func(gtk.Widget) {
+		if uh.askBluefinProbed {
+			return
+		}
+		uh.askBluefinProbed = true
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			avail, vis, err := devmenu.AskBluefinState(ctx)
+			sgtk.RunOnMainThread(func() {
+				if uh.askBluefinMenuRow == nil || uh.askBluefinToggle == nil {
+					return
+				}
+				if err != nil || !avail {
+					uh.askBluefinToggle.widget.SetSensitive(false)
+					return
+				}
+				uh.askBluefinToggle.set(vis)
+				uh.askBluefinToggle.widget.SetSensitive(true)
+			})
+		}()
+	}
+	page.ConnectMap(&uh.askBluefinMapped)
 
 	uh.showAgentModeState(state)
 
