@@ -12,6 +12,7 @@ import (
 	"codeberg.org/puregotk/puregotk/v4/gtk"
 	"github.com/projectbluefin/chairlift/internal/agentmode"
 	"github.com/projectbluefin/chairlift/internal/aistack"
+	"github.com/projectbluefin/chairlift/internal/devmenu"
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/views/actionmsg"
 	"github.com/projectbluefin/chairlift/internal/views/pageview"
@@ -81,12 +82,41 @@ func (uh *UserHome) buildAgentModeGroup(page *adw.PreferencesPage) {
 	uh.gooseLaunchBtn = launchBtn
 	group.Add(&gooseRow.Widget)
 
+	askBluefinRow := adw.NewActionRow()
+	askBluefinRow.SetTitle(pageview.AskBluefinMenuRowTitle())
+	askBluefinRow.SetSubtitle(pageview.AskBluefinMenuRowSubtitle())
+	uh.askBluefinMenuRow = askBluefinRow
+	uh.askBluefinToggle = newGuardedSwitch(false, func(on bool) {
+		uh.onAskBluefinMenuToggled(on, uh.askBluefinToggle)
+	})
+	uh.askBluefinToggle.widget.SetSensitive(false)
+	askBluefinRow.AddSuffix(&uh.askBluefinToggle.widget.Widget)
+	askBluefinRow.SetActivatableWidget(&uh.askBluefinToggle.widget.Widget)
+	group.Add(&askBluefinRow.Widget)
+
 	address := adw.NewActionRow()
 	address.SetTitle("Local connection")
 	address.SetSubtitle("http://" + aistack.Address + "/v1")
 	address.SetSubtitleSelectable(true)
 	group.Add(&address.Widget)
 	page.Add(group)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		avail, vis, err := devmenu.AskBluefinState(ctx)
+		sgtk.RunOnMainThread(func() {
+			if uh.askBluefinMenuRow == nil || uh.askBluefinToggle == nil {
+				return
+			}
+			if err != nil || !avail {
+				uh.askBluefinToggle.widget.SetSensitive(false)
+				return
+			}
+			uh.askBluefinToggle.set(vis)
+			uh.askBluefinToggle.widget.SetSensitive(true)
+		})
+	}()
 
 	uh.showAgentModeState(state)
 
@@ -395,6 +425,30 @@ func (uh *UserHome) onGooseLaunchClicked() {
 			}
 			if dryRun {
 				uh.toastAdder.ShowToast("[DRY-RUN] Would launch Goose Desktop")
+			}
+		})
+	}()
+}
+
+func (uh *UserHome) onAskBluefinMenuToggled(enabled bool, toggle *guardedSwitch) {
+	if !uh.askBluefinGate.TryStart() {
+		return
+	}
+	toggle.widget.SetSensitive(false)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		err := devmenu.SetAskBluefinVisible(ctx, enabled)
+		_, visible, readErr := devmenu.AskBluefinState(ctx)
+		sgtk.RunOnMainThread(func() {
+			uh.askBluefinGate.Reset()
+			toggle.widget.SetSensitive(true)
+			if readErr == nil {
+				toggle.set(visible)
+			}
+			if err != nil {
+				log.Printf("views: setting ask bluefin menu visibility failed: %v", err)
+				uh.toastAdder.ShowErrorToast("Could not update the Ask Bluefin menu entry.")
 			}
 		})
 	}()

@@ -83,7 +83,7 @@ the ordinary no-selection state.
 **Current Control Center surface (2026-10-03).** At the owner's request,
 the page focuses on this computer: one **Agent Mode** switch, visible
 **Active Model** and **Recommended Presets** rows, a **Goose** row with Launch
-action, and the selectable local
+action, a **Show Ask Bluefin in menu** preference, and the selectable local
 OpenAI-compatible connection address `http://127.0.0.1:17434/v1`.
 Connection instructions are not hidden behind an expander.
 Goose Desktop (`ublue-os/tap/goose-linux`) is the Agent Mode desktop GUI.
@@ -92,6 +92,9 @@ with the active model without persisting provider or model into Goose's configur
 Readiness requires Goose Desktop and `linux-mcp-server` installed and the hardened
 Linux diagnostic extension verified on disk (stdio, enabled, real executable,
 `--toolset FIXED`, and no SSH defaults).
+`chairlift --ask-bluefin` dispatches to Goose Desktop when all prerequisites are met,
+or presents Control Center on the Agents page naming the missing prerequisite.
+Custom Command Menu visibility is managed via user-layer override/reset.
 The remote-machine administration surface and its backend are
 removed, avoiding a second configuration workflow on this local-mode page.
 ChairLift leaves unrelated llmman configuration intact; it changes only its

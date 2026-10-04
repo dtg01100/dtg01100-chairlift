@@ -2199,6 +2199,12 @@ Launching Goose requires all readiness prerequisites to be satisfied:
 - Goose Desktop and `linux-mcp-server` are installed (`goose-desktop` and `linux-mcp-server` resolving on `$PATH` or via Homebrew)
 - Goose's Linux diagnostic extension is verified: stdio transport, enabled, real executable, literal `--toolset FIXED`, and no SSH defaults (`troubleshoot.VerifyExtensionOnDisk`).
 
+`chairlift --ask-bluefin` is the entry point for Bluefin's Custom Command Menu and desktop shortcut. Cold invocations and running-application remote invocations behave identically:
+- When all readiness conditions are met, Goose Desktop is launched directly via llmman's integration without presenting the Control Center window.
+- When any prerequisite is missing or launch fails, Control Center opens to the Agents page and displays a toast naming the exact missing prerequisite.
+
+The Agents page also offers a **Show Ask Bluefin in menu** preference. It manages the distro-owned Ask Bluefin entry in GNOME Shell's Custom Command Menu (`org.gnome.shell.extensions.custom-command-list`) via `internal/devmenu`. When hidden, it writes a user-layer override (`visible=false`); when shown, it resets the key in the user layer to reveal the distro default without pinning it into user state.
+
 ## Explicit setup flow
 
 Setup never opens automatically. `--setup`, its `--first-run` alias, and the

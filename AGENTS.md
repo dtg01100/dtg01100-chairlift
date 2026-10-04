@@ -802,6 +802,11 @@ An agent must not break these:
   persisting provider or model into Goose's configuration. It requires the
   hardened `linux-mcp-server` extension verified on disk: stdio transport,
   enabled, real executable, literal `--toolset FIXED`, and no SSH defaults.
+  `chairlift --ask-bluefin` dispatches to Goose Desktop when all prerequisites
+  are met, or presents Control Center on the Agents page naming the missing
+  prerequisite, with identical behavior for cold and running instances.
+  "Show Ask Bluefin in menu" modifies only the distro-owned Ask Bluefin entry
+  in GNOME Custom Command Menu via user-layer override/reset.
 - **Printer applications are rootless quadlets, locked until their
   administration is authenticated, and never a false enabled indicator.**
   `internal/printerapp` writes one `.container` quadlet per driver family

@@ -267,11 +267,14 @@ type UserHome struct {
 	agentRefresh       actionstate.RefreshGate
 	agentPresetDialogs dialogRoute
 
-	// Goose Desktop (agents_page)
-	gooseRow       *adw.ActionRow
-	gooseLaunchBtn *gtk.Button
-	gooseSpinner   *gtk.Spinner
-	gooseGate      actionstate.Gate
+	// Goose Desktop & Ask Bluefin (agents_page)
+	gooseRow          *adw.ActionRow
+	gooseLaunchBtn    *gtk.Button
+	gooseSpinner      *gtk.Spinner
+	gooseGate         actionstate.Gate
+	askBluefinMenuRow *adw.ActionRow
+	askBluefinToggle  *guardedSwitch
+	askBluefinGate    actionstate.Gate
 
 	// Powerwash / Factory Reset (maintenance_page reset_group)
 	powerwashGate    actionstate.Gate

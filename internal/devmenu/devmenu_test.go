@@ -549,6 +549,97 @@ func TestApplyPreviewDryRun(t *testing.T) {
 	}
 }
 
+func TestAskBluefinPreference(t *testing.T) {
+	origLookPath := lookPath
+	origRunCommand := runCommand
+	defer func() {
+		lookPath = origLookPath
+		runCommand = origRunCommand
+		dryrun.Set(false)
+	}()
+
+	lookPath = func(file string) (string, error) { return "/usr/bin/" + file, nil }
+
+	t.Run("state when absent", func(t *testing.T) {
+		mock := newMockDconf()
+		mock.defaults[DconfPath+"command1"] = "('Terminal', 'ptyxis', 'term', true)"
+		runCommand = mock.runCommand
+
+		avail, vis, err := AskBluefinState(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if avail || vis {
+			t.Errorf("AskBluefinState() = (%v, %v), want (false, false)", avail, vis)
+		}
+	})
+
+	t.Run("state when present and visible", func(t *testing.T) {
+		mock := newMockDconf()
+		mock.defaults[DconfPath+"command11"] = "('Ask Bluefin', 'xdg-open https://ask.projectbluefin.io', '', true)"
+		runCommand = mock.runCommand
+
+		avail, vis, err := AskBluefinState(context.Background())
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !avail || !vis {
+			t.Errorf("AskBluefinState() = (%v, %v), want (true, true)", avail, vis)
+		}
+	})
+
+	t.Run("disable writes user-layer override", func(t *testing.T) {
+		mock := newMockDconf()
+		mock.defaults[DconfPath+"command11"] = "('Ask Bluefin', 'xdg-open https://ask.projectbluefin.io', '', true)"
+		runCommand = mock.runCommand
+
+		if err := SetAskBluefinVisible(context.Background(), false); err != nil {
+			t.Fatalf("SetAskBluefinVisible(false) error: %v", err)
+		}
+
+		wantKey := DconfPath + "command11"
+		if val, ok := mock.user[wantKey]; !ok || !strings.Contains(val, "false") {
+			t.Errorf("expected user override with false for %s, got %v", wantKey, val)
+		}
+	})
+
+	t.Run("re-enable resets key to reveal distro default", func(t *testing.T) {
+		mock := newMockDconf()
+		key := DconfPath + "command11"
+		mock.defaults[key] = "('Ask Bluefin', 'xdg-open https://ask.projectbluefin.io', '', true)"
+		mock.user[key] = "('Ask Bluefin', 'xdg-open https://ask.projectbluefin.io', '', false)"
+		runCommand = mock.runCommand
+
+		if err := SetAskBluefinVisible(context.Background(), true); err != nil {
+			t.Fatalf("SetAskBluefinVisible(true) error: %v", err)
+		}
+
+		if !mock.resets[key] {
+			t.Errorf("expected reset of %s, got resets: %v", key, mock.resets)
+		}
+		if _, ok := mock.user[key]; ok {
+			t.Errorf("expected key %s removed from user layer, still present", key)
+		}
+	})
+
+	t.Run("dry-run does not mutate", func(t *testing.T) {
+		dryrun.Set(true)
+		defer dryrun.Set(false)
+
+		mock := newMockDconf()
+		mock.defaults[DconfPath+"command11"] = "('Ask Bluefin', 'xdg-open https://ask.projectbluefin.io', '', true)"
+		runCommand = mock.runCommand
+
+		if err := SetAskBluefinVisible(context.Background(), false); err != nil {
+			t.Fatalf("SetAskBluefinVisible(false) under dry-run error: %v", err)
+		}
+
+		if len(mock.writes) > 0 || len(mock.resets) > 0 {
+			t.Errorf("dry-run performed mutations: writes=%v, resets=%v", mock.writes, mock.resets)
+		}
+	})
+}
+
 func TestApplyDoesNotPinWhenSemanticallyEqual(t *testing.T) {
 	origLookPath := lookPath
 	origRunCommand := runCommand
