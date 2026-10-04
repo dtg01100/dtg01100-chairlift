@@ -153,9 +153,16 @@ lock or establish physical printing, USB, or mDNS interoperability.
     `systemctl --user restart` with the same port and name, which the
     deterministic unit shape is designed for but has not been demonstrated
     against the real image.
-- **Failure surfacing** ([#331](https://github.com/projectbluefin/chairlift/issues/331)):
-  a missing image, a refused admin configuration, or a crashing service is an
-  actionable, non-enabled state — never a false enabled indicator.
+- **Failure surfacing and diagnostics** ([#331](https://github.com/projectbluefin/chairlift/issues/331)):
+  Readiness queries and failure classification (`printerapp.Diagnose` / `printerapp.ProbeDiagnostics`)
+  evaluate systemd `is-active`, `Result`, and `SubState` properties, journal logs, and container image presence:
+  - **Missing Podman**: floored at host capability level; the group is omitted or row reports Podman is not installed.
+  - **Failed rootless device access**: detected via permission denied / access denied logs on `/dev/usb/lp*` or `/dev/bus/usb/*`; the row instructs checking USB permissions and `lp` group membership.
+  - **Unavailable image**: detected via container pull failure or missing image in registry/local storage; the row advises checking network and registry connectivity.
+  - **Plugin verification failure**: detected via GPG/checksum verification failure logs from HP's proprietary driver plugin verifier; the row notes the signature failure.
+  - **Service crash**: detected via systemd signal, core dump, or fatal exception status; the row directs the user to `journalctl --user` and restart.
+  Every failure is rendered as an actionable state, never a false enabled indicator.
+- **HPLIP plugin consent**: HPLIP's proprietary plugin consent is an interactive opt-in flow served exclusively within PAPPL's web interface at `/plugin`. The published OCI image's entrypoint exposes no external CLI, flag, or environment variable for headless consent; automated or host-driven plugin consent remains unmet until an image-side configuration contract exists.
 
 ## References
 

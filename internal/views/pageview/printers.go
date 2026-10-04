@@ -48,6 +48,14 @@ func PrinterAppSubtitle(s printerapp.State, port int) string {
 		return "Starting… The driver image is downloaded the first time, which can take a few minutes."
 	case printerapp.StateReady:
 		return fmt.Sprintf("Running. Add and manage its printers at http://localhost:%d/", port)
+	case printerapp.StateFailedDeviceAccess:
+		return "Printer device access failed. Ensure your user account has permission to access USB printer devices (e.g. 'lp' group membership or udev rules)."
+	case printerapp.StateFailedImage:
+		return "Container image unavailable. Podman could not find or download the driver image; check your network connection and container registry access."
+	case printerapp.StateFailedPlugin:
+		return "HP proprietary plugin verification failed. The downloaded driver component failed cryptographic signature verification and was not installed."
+	case printerapp.StateFailedCrash:
+		return "The printer application crashed unexpectedly. Check journalctl --user for logs, or turn it off and on again to restart."
 	case printerapp.StateFailed:
 		return "Turned on, but the printer application is not running. Turn it off and on again to restart it."
 	default:
