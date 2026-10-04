@@ -136,6 +136,79 @@ def unit(context):
     write_file(fragment_path(context), "OLLAMA_HOST=127.0.0.1:17434\n")
 
 
+@stub("agents.goose")
+def goose(context):
+    """Goose Desktop and linux-mcp-server are installed and verified."""
+    recorder(context, "goose-desktop")
+    recorder(context, "linux-mcp-server")
+    config_dir = os.path.join(context.home, ".config", "goose")
+    os.makedirs(config_dir, exist_ok=True)
+    with open(os.path.join(config_dir, "config.yaml"), "w", encoding="utf-8") as handle:
+        handle.write(
+            "extensions:\n"
+            "  linux-mcp-server:\n"
+            "    args:\n"
+            "      - --toolset\n"
+            "      - FIXED\n"
+            "      - --no-search-for-ssh-key\n"
+            "      - --verify-host-keys\n"
+            "    cmd: linux-mcp-server\n"
+            "    enabled: true\n"
+            "    type: stdio\n"
+        )
+
+
+DEVMENU_PATH = "/org/gnome/shell/extensions/custom-command-list/"
+
+
+def _tuple(label, command, icon, visible):
+    return f"('{label}', '{command}', '{icon}', {'true' if visible else 'false'})"
+
+
+@stub("agents.devmenu")
+def devmenu(context):
+    """The Custom Command Menu extension with Ask Bluefin entry."""
+    dump = "\n".join(
+        [
+            "[/]",
+            "command11=" + _tuple("Ask Bluefin", "xdg-open https://ask.projectbluefin.io", "", True),
+            "",
+        ]
+    )
+    defaults = {
+        "command11": _tuple("Ask Bluefin", "xdg-open https://ask.projectbluefin.io", "", True),
+    }
+    dump_path = os.path.join(context.scenario_dir, "dconf-dump.txt")
+    with open(dump_path, "w", encoding="utf-8") as handle:
+        handle.write(dump)
+    default_cases = "\n".join(
+        f'      "{DEVMENU_PATH}{key}") echo "{value}" ;;' for key, value in defaults.items()
+    )
+    dconf_log = os.path.join(calls_dir(context), "dconf")
+    fake_executable(
+        context,
+        "dconf",
+        f'printf "%s\\n" "$*" >> "{dconf_log}"\n'
+        + f"""
+case "$1" in
+  dump)
+    [ "$2" = "{DEVMENU_PATH}" ] && cat "{dump_path}"
+    ;;
+  read)
+    if [ "$2" = "-d" ]; then
+      case "$3" in
+{default_cases}
+      esac
+    fi
+    ;;
+esac
+exit 0
+""",
+    )
+
+
+
+
 NODE_SERVER = r'''
 import json, sys
 from pathlib import Path
@@ -212,3 +285,44 @@ def node(context):
             process.kill()
             raise RuntimeError(f"the llmman node stub never listened on {NODE_HOST}:{NODE_PORT}")
         time.sleep(0.05)
+
+
+def registration_path(context):
+    return os.path.join(context.home, ".config", "hive", "contributor.env")
+
+
+@stub("agents.contribute.ready")
+def contribute_ready(context):
+    """Preflight passes: xdg-terminal-exec, ujust with contribute, podman, and registration exist."""
+    recorder(context, "xdg-terminal-exec")
+    recorder(
+        context,
+        "ujust",
+        """
+        if [ "$1" = "--summary" ]; then
+            echo "benchmark update contribute clean-system"
+            exit 0
+        fi
+        exit 0
+        """,
+    )
+    recorder(context, "podman")
+    write_file(registration_path(context), "HIVE_HUB=https://example.com/api/contribute/ws\n")
+
+
+@stub("agents.contribute.noreg")
+def contribute_noreg(context):
+    """Preflight passes except missing registration."""
+    recorder(context, "xdg-terminal-exec")
+    recorder(
+        context,
+        "ujust",
+        """
+        if [ "$1" = "--summary" ]; then
+            echo "benchmark update contribute clean-system"
+            exit 0
+        fi
+        exit 0
+        """,
+    )
+    recorder(context, "podman")

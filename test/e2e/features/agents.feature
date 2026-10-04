@@ -22,6 +22,8 @@ Feature: Agents page
     And the "Agent Mode" row says "Turn on to install the model server"
     And the "Active Model" row says "Turn on Agent Mode to choose a model."
     And the model chooser is insensitive
+    And the "Goose" row says "Turn on Agent Mode to launch Goose."
+    And the "Launch" button in the "Goose" row is insensitive
     And the "Local connection" row says "http://127.0.0.1:17434/v1"
 
   @stub.agents.llmman @stub.agents.unit @stub.agents.node @stub.agents.alias
@@ -33,6 +35,8 @@ Feature: Agents page
     And the llmman node endpoint was probed
     And the "Active Model" row says "unsloth/Qwen3-8B-GGUF:Q4_K_M"
     And the model chooser is sensitive
+    And the "Goose" row says "Goose Desktop or linux-mcp-server is not installed."
+    And the "Launch" button in the "Goose" row is insensitive
 
   @stub.agents.llmman @stub.agents.unit @stub.agents.node
   Scenario: A ready server with no alias does not invent an active model
@@ -136,9 +140,57 @@ Feature: Agents page
     Then the application log contains "[DRY-RUN] would configure alias bluefin-active to unsloth/gemma-3"
     And the "Active Model" row says "unsloth/Qwen3-8B-GGUF:Q4_K_M"
 
+  @stub.agents.llmman @stub.agents.unit @stub.agents.node @stub.agents.alias @stub.agents.goose
+  Scenario: A ready Agent Mode with verified Goose allows launch in dry run
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the Agent Mode switch settles on and sensitive
+    And the "Active Model" row says "unsloth/Qwen3-8B-GGUF:Q4_K_M"
+    And the "Goose" row says "Ready to launch with unsloth/Qwen3-8B-GGUF:Q4_K_M."
+    And the "Launch" button in the "Goose" row is sensitive
+    When I click the "Launch" button in the "Goose" row
+    Then I see "[DRY-RUN] Would launch Goose Desktop"
+    And the application log contains "[DRY-RUN] would launch Goose Desktop with model unsloth/Qwen3-8B-GGUF:Q4_K_M via llmman"
+    And llmman was never asked to "launch"
+
   @stub.agents.llmman @stub.agents.unit @stub.agents.node
   Scenario: Every Agents control has an accessible name
     Given ChairLift is running
     When I open the "Agents" page
     Then every visible action control has an accessible name and an action
     And every visible toggle reports its state
+
+  @stub.agents.contribute.ready
+  Scenario: Contribute to Bluefin is ready when all preflight checks pass
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the "Contribute to Bluefin" row says "Run the Hive contributor appliance in a terminal."
+    And the "Contribute" button in the "Contribute to Bluefin" row is sensitive
+    When I click the "Contribute" button in the "Contribute to Bluefin" row
+    Then the application log contains "[DRY-RUN] would launch xdg-terminal-exec ujust contribute"
+    And I see "[DRY-RUN] Preview: would launch Contribute to Bluefin in a terminal"
+
+  @stub.agents.contribute.noreg
+  Scenario: Contribute to Bluefin explains missing Hive registration
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the "Contribute to Bluefin" row says "Register this machine first — see https://github.com/projectbluefin/contribute#configuration"
+    And the "Contribute" button in the "Contribute to Bluefin" row is insensitive
+
+  @stub.agents.devmenu
+  Scenario: Show Ask Bluefin in menu dry-run toggle previews and restores without writing dconf
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the switch in the "Show Ask Bluefin in menu" row is on
+    When I toggle the switch in the "Show Ask Bluefin in menu" row
+    Then the application log contains "[DRY-RUN] would set Custom Command Menu command11 visible=false"
+    And the switch in the "Show Ask Bluefin in menu" row is on
+    And dconf was never asked to "write"
+    And dconf was never asked to "reset"
+
+  Scenario: A second invocation with ask-bluefin lands on Agents when prerequisite is missing
+    Given ChairLift is running
+    When I open the "Apps" page
+    And I run a second invocation with "--dry-run --ask-bluefin"
+    Then the "Agents" page is shown
+    And I see "Agent Mode is not running."

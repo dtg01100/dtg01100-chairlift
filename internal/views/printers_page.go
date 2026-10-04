@@ -116,16 +116,12 @@ func (uh *UserHome) showPrinterAppState(pr *printerRow, state printerapp.State) 
 	pr.toggle.widget.SetSensitive(state != printerapp.StateBlocked)
 }
 
-// probePrinterApp asks systemd whether an installed unit's service is
-// running and re-renders the row, off the main thread.
+// probePrinterApp asks systemd and diagnostics whether an installed unit's
+// service is running and re-renders the row, off the main thread.
 func (uh *UserHome) probePrinterApp(pr *printerRow, facts printerapp.Facts) {
 	ctx, cancel := context.WithTimeout(context.Background(), printerProbeTimeout)
 	defer cancel()
-	active, err := printerapp.ProbeActive(ctx, pr.app)
-	if err != nil {
-		log.Printf("views: printer application %s readiness unknown: %v", pr.app.Family.ID, err)
-	}
-	facts.Checked, facts.Active = true, active
+	state := printerapp.ProbeDiagnostics(ctx, pr.app, facts.Capable)
 
 	sgtk.RunOnMainThread(func() {
 		// A toggle that started, or already finished, meanwhile owns the
@@ -133,7 +129,7 @@ func (uh *UserHome) probePrinterApp(pr *printerRow, facts printerapp.Facts) {
 		if !pr.toggle.widget.GetActive() || !pr.gate.TryStart() {
 			return
 		}
-		uh.showPrinterAppState(pr, printerapp.Resolve(facts))
+		uh.showPrinterAppState(pr, state)
 		pr.gate.Reset()
 	})
 }
@@ -174,6 +170,12 @@ func (uh *UserHome) onPrinterAppToggled(pr *printerRow, enabled bool) {
 			facts.Checked, facts.Active = true, active
 		}
 
+		var confirmedState printerapp.State
+		decision := actionmsg.PrinterApp(dryRun, enabled, pr.title)
+		if err == nil && decision.Confirm {
+			confirmedState = printerapp.ProbeDiagnostics(ctx, pr.app, true)
+		}
+
 		sgtk.RunOnMainThread(func() {
 			pr.toggle.widget.SetSensitive(true)
 
@@ -187,10 +189,9 @@ func (uh *UserHome) onPrinterAppToggled(pr *printerRow, enabled bool) {
 				return
 			}
 
-			decision := actionmsg.PrinterApp(dryRun, enabled, pr.title)
 			pr.toggle.set(decision.Confirm == enabled)
 			if decision.Confirm {
-				uh.showPrinterAppState(pr, printerapp.Resolve(facts))
+				uh.showPrinterAppState(pr, confirmedState)
 			} else {
 				uh.showPrinterAppState(pr, pr.state)
 			}

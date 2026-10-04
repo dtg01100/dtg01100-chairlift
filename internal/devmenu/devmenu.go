@@ -24,6 +24,18 @@ const MaxCommands = 99
 // TargetLabels are the Custom Command Menu labels managed by Developer Mode.
 var TargetLabels = []string{"Terminal", "Containers"}
 
+const (
+	// AskBluefinLabel is the title of the distro-owned Ask Bluefin menu entry.
+	AskBluefinLabel = "Ask Bluefin"
+
+	// AskBluefinCommand is the command of the distro-owned Ask Bluefin menu entry.
+	AskBluefinCommand = "xdg-open https://ask.projectbluefin.io"
+
+	// AskBluefinDispatchCommand is the entry the distro is expected to ship in
+	// place of the web link; both are ChairLift's owned identity.
+	AskBluefinDispatchCommand = "chairlift --ask-bluefin"
+)
+
 // Entry represents a Custom Command Menu tuple: (label, command, icon, visible).
 type Entry struct {
 	Label   string
@@ -40,6 +52,11 @@ func IsDeveloperLabel(label string) bool {
 		}
 	}
 	return false
+}
+
+// IsAskBluefin reports whether an Entry matches ChairLift's owned Ask Bluefin identity.
+func IsAskBluefin(e Entry) bool {
+	return e.Label == AskBluefinLabel && (e.Command == AskBluefinCommand || e.Command == AskBluefinDispatchCommand)
 }
 
 // runCommand is an injection seam for external command execution.
@@ -378,6 +395,117 @@ func Apply(ctx context.Context, developerMode bool) error {
 				return fmt.Errorf("devmenu: writing %s: %w: %s", key, err, strings.TrimSpace(out))
 			}
 		}
+	}
+
+	return nil
+}
+
+// AskBluefinState reports whether the owned Ask Bluefin entry is available in
+// the Custom Command Menu extension and its current visibility state.
+func AskBluefinState(ctx context.Context) (available bool, visible bool, err error) {
+	entries, err := load(ctx)
+	if err != nil {
+		return false, false, err
+	}
+	if len(entries) == 0 {
+		return false, false, nil
+	}
+	for i := 1; i <= MaxCommands; i++ {
+		key := fmt.Sprintf("command%d", i)
+		cur, ok := entries[key]
+		if !ok {
+			continue
+		}
+		entry, err := ParseEntry(cur)
+		if err != nil {
+			continue
+		}
+		if IsAskBluefin(entry) {
+			return true, entry.Visible, nil
+		}
+	}
+	return false, false, nil
+}
+
+// SetAskBluefinVisible updates the visibility of the owned Ask Bluefin entry in
+// the Custom Command Menu extension.
+// It modifies only an entry whose title and command match ChairLift's owned identity.
+// When visible matches the distro default (read via `dconf read -d`), it resets the
+// key in the user layer so distro defaults are revealed rather than copied into user state.
+func SetAskBluefinVisible(ctx context.Context, visible bool) error {
+	entries, err := load(ctx)
+	if err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+
+	for i := 1; i <= MaxCommands; i++ {
+		key := fmt.Sprintf("command%d", i)
+		cur, ok := entries[key]
+		if !ok {
+			continue
+		}
+		dconfKeyPath := DconfPath + key
+
+		entry, err := ParseEntry(cur)
+		if err != nil {
+			continue
+		}
+
+		if !IsAskBluefin(entry) {
+			continue
+		}
+
+		desired := Entry{
+			Label:   entry.Label,
+			Command: entry.Command,
+			Icon:    entry.Icon,
+			Visible: visible,
+		}
+		desiredFormatted := FormatEntry(desired)
+
+		defaultRaw, err := runCommand(ctx, "dconf", "read", "-d", dconfKeyPath)
+		if err != nil {
+			return fmt.Errorf("devmenu: reading default %s: %w: %s", key, err, strings.TrimSpace(defaultRaw))
+		}
+		def := strings.TrimSpace(defaultRaw)
+
+		defMatches := false
+		if def != "" {
+			if defEntry, defErr := ParseEntry(def); defErr == nil {
+				if defEntry == desired {
+					defMatches = true
+				}
+			}
+		}
+
+		if entry == desired {
+			return nil
+		}
+
+		if defMatches {
+			if dryrun.Enabled() {
+				log.Printf("[DRY-RUN] would reset Custom Command Menu %s to default", key)
+			} else {
+				out, err := runCommand(ctx, "dconf", "reset", dconfKeyPath)
+				if err != nil {
+					return fmt.Errorf("devmenu: resetting %s: %w: %s", key, err, strings.TrimSpace(out))
+				}
+			}
+			return nil
+		}
+
+		if dryrun.Enabled() {
+			log.Printf("[DRY-RUN] would set Custom Command Menu %s visible=%t", key, visible)
+		} else {
+			out, err := runCommand(ctx, "dconf", "write", dconfKeyPath, desiredFormatted)
+			if err != nil {
+				return fmt.Errorf("devmenu: writing %s: %w: %s", key, err, strings.TrimSpace(out))
+			}
+		}
+		return nil
 	}
 
 	return nil

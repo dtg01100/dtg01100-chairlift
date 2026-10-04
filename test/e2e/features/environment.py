@@ -211,6 +211,7 @@ def before_scenario(context, scenario):
 
 
 def launch_app(context, binary):
+    context.current_binary = binary
     context.log_path = os.path.join(context.scenario_dir, "chairlift.log")
     log = open(context.log_path, "wb")
     context.app_process = subprocess.Popen(

@@ -1718,6 +1718,26 @@ both files stay and the UI says the service is still running. Binaries
 and models are never removed. Nothing is privileged, so there is no helper
 subcommand and no PolicyKit action.
 
+#### Contribute to Bluefin (`internal/contribute`)
+
+`internal/contribute` manages preflight and command construction for launching
+a contributor session from the Agents page. It launches Common's merged `ujust
+contribute` recipe through `xdg-terminal-exec`, running the foreground
+contributor container appliance.
+
+Preflight is pure, read-only, and executes off the GTK thread (`Preflight`):
+1. `xdg-terminal-exec` on `$PATH` to launch the terminal emulator.
+2. `ujust` on `$PATH`.
+3. `ujust --summary` containing the `contribute` recipe.
+4. `podman` on `$PATH`.
+5. Hive registration file present at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`.
+
+When any check fails, the row displays an actionable subtitle (including a link
+to registration setup when the registration file is missing) and leaves the
+action button insensitive. Ready actions invoke `launcher.Start`, reporting
+launch failures asynchronously through the UI toast surface. Previews under
+`--dry-run` log the launch command without opening a terminal or spawning a worker.
+
 ### Printers (`internal/printerapp`)
 
 `internal/printerapp` is the printer port of `internal/aistack`: one rootless
@@ -2184,6 +2204,26 @@ There is no separate Go client library dependency for bootc: status/stage types 
 ## Subsystem Details
 
 - [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, bootc, and Updex wrapper details
+
+### Agent Mode and Ask Bluefin (`internal/agentmode`, `internal/aistack`)
+
+`internal/agentmode` coordinates Agent Mode's client integration, readiness evaluation, and the `chairlift --ask-bluefin` dispatcher.
+
+Goose Desktop (`ublue-os/tap/goose-linux`) is the Agent Mode desktop GUI. Rather than writing or rewriting Goose's persistent provider configuration (`~/.config/goose/config.yaml`), ChairLift launches Goose Desktop through llmman's invocation-scoped integration:
+`llmman launch goose-desktop --model <active-model>`.
+This passes the model, endpoint, and invocation environment without mutating the user's persistent configuration.
+
+Launching Goose requires all readiness prerequisites to be satisfied:
+- llmman daemon is healthy (`aistack.Healthy`)
+- An active model is selected (`aistack.ReadActiveModel`)
+- Goose Desktop and `linux-mcp-server` are installed (`goose-desktop` and `linux-mcp-server` resolving on `$PATH` or via Homebrew)
+- Goose's Linux diagnostic extension is verified: stdio transport, enabled, real executable, literal `--toolset FIXED`, and no SSH defaults (`troubleshoot.VerifyExtensionOnDisk`).
+
+`chairlift --ask-bluefin` is the entry point for Bluefin's Custom Command Menu and desktop shortcut. Cold invocations and running-application remote invocations behave identically:
+- When all readiness conditions are met, Goose Desktop is launched directly via llmman's integration without presenting the Control Center window.
+- When any prerequisite is missing or launch fails, Control Center opens to the Agents page and displays a toast naming the exact missing prerequisite.
+
+The Agents page also offers a **Show Ask Bluefin in menu** preference. It manages the distro-owned Ask Bluefin entry in GNOME Shell's Custom Command Menu (`org.gnome.shell.extensions.custom-command-list`) via `internal/devmenu`. When hidden, it writes a user-layer override (`visible=false`); when shown, it resets the key in the user layer to reveal the distro default without pinning it into user state.
 
 ## Explicit setup flow
 

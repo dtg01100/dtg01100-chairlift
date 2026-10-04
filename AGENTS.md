@@ -766,7 +766,8 @@ An agent must not break these:
   staging keeps its existing fixed `bootc-update-stage` path.
 - **Agent Mode is local, unprivileged, and reports observed readiness.**
   `agents_page` has one Agent Mode switch, visible model and preset controls,
-  and the local API address. Unready model controls stay
+  the local API address, a Goose Desktop row with a Launch action, and a
+  "Show Ask Bluefin in menu" preference. Unready model and launch controls stay
   visible and insensitive instead of disappearing. Peer/offload controls and
   their backend are removed; this surface manages this computer only.
   `internal/aistack` owns three artifacts: the generated installation Brewfile,
@@ -800,6 +801,18 @@ An agent must not break these:
   unit and fragment, keeping binaries and models. A failed stop that
   cannot prove the service inactive preserves both files and the management
   handle. There is no pkexec route, Homebrew service, or container stack.
+  Goose Desktop (`ublue-os/tap/goose-linux`) is the Agent Mode desktop GUI,
+  launched via `llmman launch goose-desktop --model <active-model>` without
+  persisting provider or model into Goose's configuration. It requires the
+  hardened `linux-mcp-server` extension verified on disk: stdio transport,
+  enabled, real executable, literal `--toolset FIXED`, and no SSH defaults.
+  `chairlift --ask-bluefin` dispatches to Goose Desktop when all prerequisites
+  are met, or presents Control Center on the Agents page naming the missing
+  prerequisite, with identical behavior for cold and running instances.
+  "Show Ask Bluefin in menu" modifies only the distro-owned Ask Bluefin entry
+  in GNOME Custom Command Menu via user-layer override/reset.
+- **Contribute to Bluefin launches the contributor appliance in a terminal through `ujust`.**
+  `agents_page` offers a "Contribute to Bluefin" action row that runs read-only preflight off the GTK thread (`internal/contribute.Preflight`) checking `xdg-terminal-exec`, `ujust` on PATH, `ujust --summary` containing the `contribute` recipe, `podman` on PATH, and the Hive registration file at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`. When preflight fails, an actionable subtitle explains the missing requirement (linking `https://github.com/projectbluefin/contribute#configuration` for missing registration) and leaves the button insensitive. Ready actions launch `xdg-terminal-exec ujust contribute` via `launcher.Start`, reporting failures asynchronously. Previews under `--dry-run` log only and launch nothing.
 - **Printer applications are rootless quadlets, locked until their
   administration is authenticated, and never a false enabled indicator.**
   `internal/printerapp` writes one `.container` quadlet per driver family
@@ -824,14 +837,19 @@ An agent must not break these:
   `PRINTER_APP_ADMIN_GROUP`, and `PRINTER_APP_SERVER_OPTIONS` — may be named
   in comments and docs as what will be wired, but no ChairLift code reads or
   writes those names until an image ships them; and do not turn the lock
-  into a hidden group or a switch that fails on every flip. Readiness on the
-  row comes from `printerapp.Observe`/`ProbeActive`/`Resolve` — `systemctl
-  --user is-active`'s state *word*, off the main thread — never from the
-  unit file's presence alone, and a present unit is never locked, so turning
-  a family off always stays possible. A failed disable keeps the unit because
-  the service could not be proven stopped. Hardware behaviour — printing
-  through a device, USB passthrough, mDNS coexistence — is unverified and
-  unwired; say so rather than claim it.
+  into a hidden group or a switch that fails on every flip. Readiness and
+  failure classification on the row come from
+  `printerapp.Observe`/`ProbeActive`/`ProbeDiagnostics`/`Diagnose` —
+  `systemctl --user is-active`'s state *word*, systemd Result/SubState
+  properties, journal logs, and container image presence probes, off the main
+  thread — never from the unit file's presence alone, and a present unit is
+  never locked, so turning a family off always stays possible. Failure modes
+  — missing Podman, rootless device access failure, unavailable image, plugin
+  verification failure, and service crash — are classified as actionable
+  non-enabled or failed states, never a false enabled indicator. A failed
+  disable keeps the unit because the service could not be proven stopped.
+  Hardware behaviour — printing through a device, USB passthrough, mDNS
+  coexistence — is unverified and unwired; say so rather than claim it.
 - **Livery remains one primary with independent task groups.** Profile
   Picture, App Launcher Icon, supported Top Bar Icon, and Files Icon keep their
   existing `livery_page` config keys and one built control set. Never add a

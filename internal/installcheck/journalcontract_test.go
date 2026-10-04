@@ -84,23 +84,27 @@ var privilegedExecSites = []privilegedExecSite{
 //
 // The comment on each entry is the command word that makes it unprivileged.
 var unprivilegedExecSites = []execSite{
-	{File: "internal/aistack/aistack.go", Func: "execCommand"},                // systemctl --user / llmman / dbus-update-activation-environment
-	{File: "internal/avatar/applier.go", Func: "runBusctl"},                   // busctl (unprivileged AccountsService call)
-	{File: "internal/autoupdate/autoupdate.go", Func: "systemctlOutput"},      // systemctl (query)
-	{File: "internal/bootc/bootc.go", Func: "getStatusFrom"},                  // bootc status (read-only)
-	{File: "internal/bootc/check.go", Func: "checkUpdateFrom"},                // bootc upgrade --check (read-only)
-	{File: "internal/devmenu/devmenu.go", Func: "execCommand"},                // dconf
-	{File: "internal/devtools/devtools.go", Func: "command"},                  // limactl / systemctl read; privilege mutations dispatch through ublue.runHelper
-	{File: "internal/distrobox/distrobox.go", Func: "RemoveAll"},              // distrobox
-	{File: "internal/firstrun/settings.go", Func: "execCommand"},              // gsettings
-	{File: "internal/flatpak/flatpak.go", Func: "runFlatpakCommandAt"},        // flatpak
-	{File: "internal/flatpak/flatpak.go", Func: "IsInstalled"},                // flatpak --version
-	{File: "internal/homebrew/homebrew.go", Func: "runBrewCommandAt"},         // brew
-	{File: "internal/homebrew/homebrew.go", Func: "IsInstalled"},              // brew --version
-	{File: "internal/livery/apply.go", Func: "execCommand"},                   // gsettings / dconf / gtk-update-icon-cache / systemctl --user
-	{File: "internal/printerapp/printerapp.go", Func: "execSystemctlOutput"},  // systemctl --user
-	{File: "internal/views/applications_page.go", Func: "UserHome.launchApp"}, // gtk-launch
-	{File: "internal/views/help_page.go", Func: "UserHome.openURL"},           // xdg-open
+	{File: "internal/agentmode/launch.go", Func: "Launch"},                       // llmman launch goose-desktop
+	{File: "internal/aistack/aistack.go", Func: "execCommand"},                   // systemctl --user / llmman / dbus-update-activation-environment
+	{File: "internal/avatar/applier.go", Func: "runBusctl"},                      // busctl (unprivileged AccountsService call)
+	{File: "internal/autoupdate/autoupdate.go", Func: "systemctlOutput"},         // systemctl (query)
+	{File: "internal/bootc/bootc.go", Func: "getStatusFrom"},                     // bootc status (read-only)
+	{File: "internal/bootc/check.go", Func: "checkUpdateFrom"},                   // bootc upgrade --check (read-only)
+	{File: "internal/contribute/contribute.go", Func: "Command"},                 // xdg-terminal-exec
+	{File: "internal/contribute/contribute.go", Func: "RealProber"},              // ujust --summary (query)
+	{File: "internal/devmenu/devmenu.go", Func: "execCommand"},                   // dconf
+	{File: "internal/devtools/devtools.go", Func: "command"},                     // limactl / systemctl read; privilege mutations dispatch through ublue.runHelper
+	{File: "internal/distrobox/distrobox.go", Func: "RemoveAll"},                 // distrobox
+	{File: "internal/firstrun/settings.go", Func: "execCommand"},                 // gsettings
+	{File: "internal/flatpak/flatpak.go", Func: "runFlatpakCommandAt"},           // flatpak
+	{File: "internal/flatpak/flatpak.go", Func: "IsInstalled"},                   // flatpak --version
+	{File: "internal/homebrew/homebrew.go", Func: "runBrewCommandAt"},            // brew
+	{File: "internal/homebrew/homebrew.go", Func: "IsInstalled"},                 // brew --version
+	{File: "internal/livery/apply.go", Func: "execCommand"},                      // gsettings / dconf / gtk-update-icon-cache / systemctl --user
+	{File: "internal/printerapp/printerapp.go", Func: "execSystemctlOutput"},     // systemctl --user
+	{File: "internal/printerapp/printerapp_diagnostics.go", Func: "execCommand"}, // journalctl --user / podman / systemctl --user
+	{File: "internal/views/applications_page.go", Func: "UserHome.launchApp"},    // gtk-launch
+	{File: "internal/views/help_page.go", Func: "UserHome.openURL"},              // xdg-open
 }
 
 func TestEveryPrivilegedExecutorJournals(t *testing.T) {

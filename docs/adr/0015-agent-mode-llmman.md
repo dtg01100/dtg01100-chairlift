@@ -80,12 +80,22 @@ alone does not prove that the running daemon can serve it. A missing alias is
 the ordinary no-selection state.
 
 
-**Current Control Center surface (2026-10-01).** At the owner's request,
+**Current Control Center surface (2026-10-03).** At the owner's request,
 the page focuses on this computer: one **Agent Mode** switch, visible
-**Active Model** and **Recommended Presets** rows, and the selectable local
+**Active Model** and **Recommended Presets** rows, a **Goose** row with Launch
+action, a **Show Ask Bluefin in menu** preference, and the selectable local
 OpenAI-compatible connection address `http://127.0.0.1:17434/v1`.
-Connection instructions are not hidden behind an
-expander. The remote-machine administration surface and its backend are
+Connection instructions are not hidden behind an expander.
+Goose Desktop (`ublue-os/tap/goose-linux`) is the Agent Mode desktop GUI.
+It is launched through llmman's invocation-scoped integration (`llmman launch goose-desktop --model <active-model>`)
+with the active model without persisting provider or model into Goose's configuration.
+Readiness requires Goose Desktop and `linux-mcp-server` installed and the hardened
+Linux diagnostic extension verified on disk (stdio, enabled, real executable,
+`--toolset FIXED`, and no SSH defaults).
+`chairlift --ask-bluefin` dispatches to Goose Desktop when all prerequisites are met,
+or presents Control Center on the Agents page naming the missing prerequisite.
+Custom Command Menu visibility is managed via user-layer override/reset.
+The remote-machine administration surface and its backend are
 removed, avoiding a second configuration workflow on this local-mode page.
 ChairLift leaves unrelated llmman configuration intact; it changes only its
 selected-model alias through llmman's CLI and overrides aggregation in the unit.

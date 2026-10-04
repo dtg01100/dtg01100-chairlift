@@ -535,3 +535,28 @@ func TestParseAndCleanExecKeepsLinesAfterAnOverlongLine(t *testing.T) {
 		t.Fatalf("executed = %v, want one bootc command", executed)
 	}
 }
+
+func TestRunJournalsUnexecutableHelperAsFailedNotRefused(t *testing.T) {
+	dryrun.Set(false)
+	t.Cleanup(func() { dryrun.Set(false) })
+
+	journalPath := filepath.Join(t.TempDir(), "journal.jsonl")
+	t.Setenv(journal.PathEnv, journalPath)
+	journal.Reset()
+	t.Cleanup(journal.Reset)
+
+	fakeHelper := filepath.Join(t.TempDir(), "fake-helper")
+	body := "#!/bin/sh\necho 'Error accessing /usr/bin/chairlift-helper: No such file or directory' >&2\nexit 127\n"
+	if err := os.WriteFile(fakeHelper, []byte(body), 0o755); err != nil {
+		t.Fatalf("writing fake helper: %v", err)
+	}
+
+	if _, _, err := Run(context.Background(), "/bin/sh", fakeHelper, "restart"); err == nil {
+		t.Fatal("Run = nil, want error on exit 127")
+	}
+
+	entries := readJournal(t, journalPath)
+	if len(entries) != 2 || entries[1].Outcome != journal.OutcomeFailed {
+		t.Fatalf("entries = %+v, want a second entry with outcome failed", entries)
+	}
+}
