@@ -212,3 +212,44 @@ def node(context):
             process.kill()
             raise RuntimeError(f"the llmman node stub never listened on {NODE_HOST}:{NODE_PORT}")
         time.sleep(0.05)
+
+
+def registration_path(context):
+    return os.path.join(context.home, ".config", "hive", "contributor.env")
+
+
+@stub("agents.contribute.ready")
+def contribute_ready(context):
+    """Preflight passes: xdg-terminal-exec, ujust with contribute, podman, and registration exist."""
+    recorder(context, "xdg-terminal-exec")
+    recorder(
+        context,
+        "ujust",
+        """
+        if [ "$1" = "--summary" ]; then
+            echo "benchmark update contribute clean-system"
+            exit 0
+        fi
+        exit 0
+        """,
+    )
+    recorder(context, "podman")
+    write_file(registration_path(context), "HIVE_HUB=https://example.com/api/contribute/ws\n")
+
+
+@stub("agents.contribute.noreg")
+def contribute_noreg(context):
+    """Preflight passes except missing registration."""
+    recorder(context, "xdg-terminal-exec")
+    recorder(
+        context,
+        "ujust",
+        """
+        if [ "$1" = "--summary" ]; then
+            echo "benchmark update contribute clean-system"
+            exit 0
+        fi
+        exit 0
+        """,
+    )
+    recorder(context, "podman")

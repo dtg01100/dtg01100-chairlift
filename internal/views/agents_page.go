@@ -21,6 +21,7 @@ import (
 func (uh *UserHome) buildAgentsPage() {
 	if uh.agentsPrefsPage != nil && uh.groupEnabled("agents_page", "agents_group") {
 		uh.buildAgentModeGroup(uh.agentsPrefsPage)
+		uh.buildContributeGroup(uh.agentsPrefsPage)
 	}
 }
 

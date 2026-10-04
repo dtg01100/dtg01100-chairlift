@@ -267,6 +267,12 @@ type UserHome struct {
 	agentRefresh       actionstate.RefreshGate
 	agentPresetDialogs dialogRoute
 
+	// Contribute to Bluefin (agents_page)
+	contributeRow     *adw.ActionRow
+	contributeButton  *gtk.Button
+	contributeSpinner *gtk.Spinner
+	contributeGate    actionstate.Gate
+
 	// Powerwash / Factory Reset (maintenance_page reset_group)
 	powerwashGate    actionstate.Gate
 	factoryResetGate actionstate.Gate

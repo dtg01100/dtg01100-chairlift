@@ -796,6 +796,8 @@ An agent must not break these:
   unit and fragment, keeping binaries and models. A failed stop that
   cannot prove the service inactive preserves both files and the management
   handle. There is no pkexec route, Homebrew service, or container stack.
+- **Contribute to Bluefin launches the contributor appliance in a terminal through `ujust`.**
+  `agents_page` offers a "Contribute to Bluefin" action row that runs read-only preflight off the GTK thread (`internal/contribute.Preflight`) checking `xdg-terminal-exec`, `ujust` on PATH, `ujust --summary` containing the `contribute` recipe, `podman` on PATH, and the Hive registration file at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`. When preflight fails, an actionable subtitle explains the missing requirement (linking `https://github.com/projectbluefin/contribute#configuration` for missing registration) and leaves the button insensitive. Ready actions launch `xdg-terminal-exec ujust contribute` via `launcher.Start`, reporting failures asynchronously. Previews under `--dry-run` log only and launch nothing. Contributing tasks remains distinct from donating local inference capacity.
 - **Printer applications are rootless quadlets, locked until their
   administration is authenticated, and never a false enabled indicator.**
   `internal/printerapp` writes one `.container` quadlet per driver family

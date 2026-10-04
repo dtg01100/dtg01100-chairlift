@@ -127,6 +127,14 @@ selectable, not hidden in Details. Apps and terminals opened after Agent Mode
 is on receive `OLLAMA_HOST`; already-open ones need restarting. Everything
 here runs in your own account, without an administrator password.
 
+**Contribute to Bluefin** runs the Hive contributor appliance in a terminal to
+contribute tasks to Project Bluefin. Before launch, preflight verifies that
+`xdg-terminal-exec`, `ujust`, the `contribute` recipe, and `podman` are
+available, and that a Hive registration file is present. When a requirement is
+missing, the row explains what is needed and keeps the action button
+unavailable until ready. In dry-run mode, it previews the launch without opening
+a terminal.
+
 ---
 
 ## Features
