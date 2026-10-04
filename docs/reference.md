@@ -140,11 +140,11 @@ the real daemon socket to be accessible, not just installed CLI tools. These
 privileged operations use only `kvm-enable`, `docker-enable`, and
 `docker-disable` with fixed argv and the account derived from `PKEXEC_UID`.
 
-`dx_group` supports optional steps that run off the GTK main
+`dx_group` takes `wsl_backend`, the WSL Mode backend: `nsl` (default) or
+`lima`; any other value is a configuration error. It also supports optional steps that run off the GTK main
 thread after a confirmed live enable, and never on a disable, a page restore, a
 failed helper call, or a `--dry-run` preview:
 
-- `wsl_backend` — backend for WSL Mode: `nsl` (default) or `lima`
 - `install_pulp` — installs the Pulp feed reader (`org.gnome.gitlab.cheywood.Pulp`) as a user-scope Flatpak from Flathub. No `pkexec`, no root: the same unprivileged posture as gaming mode
 - `stage_feeds` — writes the curated catalog to `~/.local/share/chairlift/developer-feeds.opml` and says so in a toast that names the path. Importing it is the user's own action inside Pulp; ChairLift never writes to Pulp's sandboxed store and never claims a subscription was imported
 
@@ -198,7 +198,7 @@ pair and unit file, and dry-run restores both switches without writes.
 |-------|-----|-------------|
 | Storage | `maintenance_freespace_group` | The single "Free up space" action: `brew cleanup` plus `flatpak uninstall --unused`. The same key gates the post-update maintenance step of an update run, so cleanup cannot be on in one place and off in the other |
 | Maintenance tasks | `maintenance_cleanup_group` | Administrator-configured scripts, listed separately and never folded into "Free up space" (disabled by default) |
-| Recovery | `reset_group` | Recovery utilities: Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Recovery also offers Roll Back and Published versions with Pin and Return to stream |
+| Recovery | `reset_group` | Recovery utilities: Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Roll Back and Published versions (Pin, Return to stream) are gated by `updates_page.bootc_updates_group` |
 
 `maintenance_cleanup_group` supports:
 

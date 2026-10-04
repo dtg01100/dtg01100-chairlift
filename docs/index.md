@@ -26,7 +26,7 @@ Control Center provides seven configurable pages, in sidebar order:
 | **Agents** | Agent Mode: run a language model on this computer (llmman), launch Goose Desktop with verified Linux tools, and contribute to Bluefin. |
 | **Features** | Distribution features, Developer Mode, WSL Mode (nsl or Lima), Docker, individually chosen IDEs/editors, selective Gaming, and safely locked printer applications. |
 | **Livery** | Choose your profile picture and the marks shown on the app launcher button, the top-bar menu, and Files. |
-| **Maintenance** | Free up space, run administrator-configured maintenance scripts, and — when an administrator opts in — Recovery (Roll Back, pin/return to stream, Powerwash, Factory Reset). |
+| **Maintenance** | Free up space, run administrator-configured maintenance scripts, and Recovery: Roll Back and pin/return to stream (with bootc updates), plus Powerwash and Factory Reset when an administrator opts in. |
 | **Help** | Enhanced Troubleshooting (an AI diagnostic assistant installed with Homebrew), plus links to the project website, issue tracker, and community documentation. |
 
 A functional page is omitted when all of its groups are disabled. Help is

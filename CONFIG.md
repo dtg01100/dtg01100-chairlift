@@ -116,7 +116,7 @@ two surviving groups to `updates_page` and remove `system_page` when convenient.
     - `script`: Absolute path to the script to execute. Required when `sudo: true`.
     - `sudo`: Boolean indicating if the script requires administrator privileges (uses pkexec). `sudo: true` is accepted only from trusted `/etc/chairlift/config.yml` or `/usr/share/chairlift/config.yml` configurations. The rule is applied to the effective configuration, so an untrusted file may not enable a group whose actions include a privileged one, even when it inherits that action from the built-in defaults rather than declaring `sudo: true` itself.
 - `maintenance_freespace_group`: One routine cleanup action composing the shared post-update maintenance runner; removes cached downloads and unused supporting software, never installed apps, documents, or containers
-- `reset_group`: Recovery utilities (disabled by default); gates Powerwash (removes user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`). Recovery also offers Roll Back and Published versions with Pin and Return to stream.
+- `reset_group`: Recovery utilities (disabled by default); gates Powerwash (removes user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`). Roll Back and Published versions (Pin, Return to stream) on the same Recovery screen are gated by `updates_page.bootc_updates_group`, not this key.
 
 ### Features Page (`features_page`)
 
