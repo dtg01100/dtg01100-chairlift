@@ -136,6 +136,29 @@ def unit(context):
     write_file(fragment_path(context), "OLLAMA_HOST=127.0.0.1:17434\n")
 
 
+@stub("agents.goose")
+def goose(context):
+    """Goose Desktop and linux-mcp-server are installed and verified."""
+    recorder(context, "goose-desktop")
+    recorder(context, "linux-mcp-server")
+    config_dir = os.path.join(context.home, ".config", "goose")
+    os.makedirs(config_dir, exist_ok=True)
+    with open(os.path.join(config_dir, "config.yaml"), "w", encoding="utf-8") as handle:
+        handle.write(
+            "extensions:\n"
+            "  linux-mcp-server:\n"
+            "    args:\n"
+            "      - --toolset\n"
+            "      - FIXED\n"
+            "      - --no-search-for-ssh-key\n"
+            "      - --verify-host-keys\n"
+            "    cmd: linux-mcp-server\n"
+            "    enabled: true\n"
+            "    type: stdio\n"
+        )
+
+
+
 NODE_SERVER = r'''
 import json, sys
 from pathlib import Path

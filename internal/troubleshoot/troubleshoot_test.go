@@ -2,10 +2,12 @@ package troubleshoot
 
 import (
 	"errors"
-	"github.com/projectbluefin/chairlift/internal/dryrun"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/projectbluefin/chairlift/internal/dryrun"
 )
 
 // A configured user may retain their own provider alongside fixed diagnostics.
@@ -228,6 +230,103 @@ func TestDetectTreatsAMissingConfigAsNotWired(t *testing.T) {
 	if Detect().Wired {
 		t.Error("Wired = true with no configuration file")
 	}
+}
+
+func TestClassifyConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		data       string
+		fileExists bool
+		want       ExtensionStatus
+	}{
+		{
+			name:       "missing file",
+			data:       "",
+			fileExists: false,
+			want:       ExtensionStatusMissing,
+		},
+		{
+			name:       "empty file",
+			data:       "   \n",
+			fileExists: true,
+			want:       ExtensionStatusMissing,
+		},
+		{
+			name:       "malformed yaml",
+			data:       ": [invalid yaml",
+			fileExists: true,
+			want:       ExtensionStatusMalformed,
+		},
+		{
+			name:       "non-mapping yaml",
+			data:       "- just a list",
+			fileExists: true,
+			want:       ExtensionStatusMalformed,
+		},
+		{
+			name:       "existing config without diagnostic extension",
+			data:       "GOOSE_PROVIDER: openai\nGOOSE_MODEL: gpt-4o\n",
+			fileExists: true,
+			want:       ExtensionStatusMissing,
+		},
+		{
+			name:       "unsafe extension - missing toolset fixed",
+			data:       strings.Replace(freshConfig, "    args: [--toolset, FIXED, --no-search-for-ssh-key, --verify-host-keys]\n", "", 1),
+			fileExists: true,
+			want:       ExtensionStatusUnsafe,
+		},
+		{
+			name:       "unsafe extension - ssh key search enabled",
+			data:       strings.Replace(freshConfig, "--no-search-for-ssh-key", "--search-for-ssh-key", 1),
+			fileExists: true,
+			want:       ExtensionStatusUnsafe,
+		},
+		{
+			name:       "valid extension with freshConfig",
+			data:       freshConfig,
+			fileExists: true,
+			want:       ExtensionStatusValid,
+		},
+		{
+			name:       "valid extension with premadeConfig",
+			data:       premadeConfig,
+			fileExists: true,
+			want:       ExtensionStatusValid,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ClassifyConfig([]byte(tt.data), tt.fileExists)
+			if got != tt.want {
+				t.Errorf("ClassifyConfig() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestVerifyExtensionOnDisk(t *testing.T) {
+	t.Run("missing config", func(t *testing.T) {
+		stubEnvironment(t, "", map[string]bool{"linux-mcp-server": true})
+		readConfig = func() ([]byte, error) { return nil, os.ErrNotExist }
+		if got := VerifyExtensionOnDisk(); got != ExtensionStatusMissing {
+			t.Errorf("VerifyExtensionOnDisk() = %v, want %v", got, ExtensionStatusMissing)
+		}
+	})
+
+	t.Run("valid config but command missing", func(t *testing.T) {
+		stubEnvironment(t, freshConfig, map[string]bool{"linux-mcp-server": false})
+		if got := VerifyExtensionOnDisk(); got != ExtensionStatusUnsafe {
+			t.Errorf("VerifyExtensionOnDisk() = %v, want %v", got, ExtensionStatusUnsafe)
+		}
+	})
+
+	t.Run("valid config and command resolves", func(t *testing.T) {
+		stubEnvironment(t, freshConfig, map[string]bool{"linux-mcp-server": true})
+		if got := VerifyExtensionOnDisk(); got != ExtensionStatusValid {
+			t.Errorf("VerifyExtensionOnDisk() = %v, want %v", got, ExtensionStatusValid)
+		}
+	})
 }
 
 func TestSetupPreservesTheOriginalFailure(t *testing.T) {

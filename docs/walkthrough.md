@@ -122,7 +122,10 @@ The row shows an activity spinner throughout setup and shutdown, then
 restores the switch if the operation fails.
 
 **Active Model** and **Recommended Presets** remain visible, becoming usable
-only when the local server is ready. The connection address is directly
+only when the local server is ready. **Goose** is the Agent Mode desktop GUI,
+launched with the active model through llmman without rewriting your persistent
+configuration. It becomes launchable once Goose Desktop, linux-mcp-server, and
+the verified Linux diagnostic toolset are in place. The connection address is directly
 selectable, not hidden in Details. Apps and terminals opened after Agent Mode
 is on receive `OLLAMA_HOST`; already-open ones need restarting. Everything
 here runs in your own account, without an administrator password.

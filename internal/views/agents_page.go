@@ -10,6 +10,7 @@ import (
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
 	"codeberg.org/puregotk/puregotk/v4/gtk"
+	"github.com/projectbluefin/chairlift/internal/agentmode"
 	"github.com/projectbluefin/chairlift/internal/aistack"
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/views/actionmsg"
@@ -66,12 +67,27 @@ func (uh *UserHome) buildAgentModeGroup(page *adw.PreferencesPage) {
 	uh.agentPresetRow = presetRow
 	group.Add(&presetRow.Widget)
 
+	gooseRow := adw.NewActionRow()
+	gooseRow.SetTitle(pageview.GooseRowTitle())
+	uh.gooseRow = gooseRow
+	uh.gooseSpinner = newActivitySpinner()
+	gooseRow.AddSuffix(&uh.gooseSpinner.Widget)
+	launchBtn := gtk.NewButtonWithLabel(pageview.GooseLaunchButtonLabel())
+	launchBtn.SetValign(gtk.AlignCenterValue)
+	launchClicked := func(_ gtk.Button) { uh.onGooseLaunchClicked() }
+	launchBtn.ConnectClicked(&launchClicked)
+	launchBtn.SetSensitive(false)
+	gooseRow.AddSuffix(&launchBtn.Widget)
+	uh.gooseLaunchBtn = launchBtn
+	group.Add(&gooseRow.Widget)
+
 	address := adw.NewActionRow()
 	address.SetTitle("Local connection")
 	address.SetSubtitle("http://" + aistack.Address + "/v1")
 	address.SetSubtitleSelectable(true)
 	group.Add(&address.Widget)
 	page.Add(group)
+
 	uh.showAgentModeState(state)
 
 	if !facts.UnitPresent {
@@ -121,14 +137,27 @@ func (uh *UserHome) showAgentModeState(state aistack.State) {
 	uh.agentModelRow.SetSubtitle(pageview.AgentModeModelUnavailable(state))
 	uh.agentPresetRow.SetSubtitle(pageview.AgentModeModelUnavailable(state))
 	if !ready {
+		if uh.gooseRow != nil {
+			uh.gooseRow.SetSubtitle(agentmode.StateDaemonUnavailable.Subtitle(""))
+		}
+		if uh.gooseLaunchBtn != nil {
+			uh.gooseLaunchBtn.SetSensitive(false)
+		}
 		return
 	}
 	uh.agentPresetRow.SetSubtitle(pageview.AgentModePresetsSubtitle())
 	uh.agentModelRow.SetSubtitle("Checking the selected model…")
+	if uh.gooseRow != nil {
+		uh.gooseRow.SetSubtitle("Checking Goose readiness…")
+	}
+	if uh.gooseLaunchBtn != nil {
+		uh.gooseLaunchBtn.SetSensitive(false)
+	}
 	go func() {
 		ctx, cancel := aistack.DefaultContext()
 		defer cancel()
 		modelRef, err := aistack.ReadActiveModel(ctx)
+		gState, _, _ := agentmode.ObserveLive(ctx)
 		sgtk.RunOnMainThread(func() {
 			if !uh.agentRefresh.IsCurrent(generation) {
 				return
@@ -136,9 +165,21 @@ func (uh *UserHome) showAgentModeState(state aistack.State) {
 			if err != nil {
 				log.Printf("views: read active model failed: %v", err)
 				uh.agentModelRow.SetSubtitle("Could not read the selected model. Choose a preset to set one.")
+				if uh.gooseRow != nil {
+					uh.gooseRow.SetSubtitle(agentmode.StateModelUnavailable.Subtitle(""))
+				}
+				if uh.gooseLaunchBtn != nil {
+					uh.gooseLaunchBtn.SetSensitive(false)
+				}
 				return
 			}
 			uh.agentModelRow.SetSubtitle(pageview.AgentModeActiveModelSubtitle(modelRef))
+			if uh.gooseRow != nil {
+				uh.gooseRow.SetSubtitle(gState.Subtitle(modelRef))
+			}
+			if uh.gooseLaunchBtn != nil {
+				uh.gooseLaunchBtn.SetSensitive(gState.Ready())
+			}
 		})
 	}()
 }
@@ -302,3 +343,59 @@ func (uh *UserHome) onAgentModeToggled(enabled bool, toggle *guardedSwitch) {
 }
 
 const agentModeReadyWait = time.Minute
+
+func (uh *UserHome) onGooseLaunchClicked() {
+	if uh.gooseLaunchBtn == nil || !uh.gooseGate.TryStart() {
+		return
+	}
+	uh.gooseLaunchBtn.SetSensitive(false)
+	setActivitySpinner(uh.gooseSpinner, true)
+	uh.gooseRow.SetSubtitle("Launching Goose Desktop…")
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		state, facts, err := agentmode.ObserveLive(ctx)
+		if err != nil || !state.Ready() {
+			sgtk.RunOnMainThread(func() {
+				uh.gooseGate.Reset()
+				setActivitySpinner(uh.gooseSpinner, false)
+				if uh.gooseLaunchBtn != nil {
+					uh.gooseLaunchBtn.SetSensitive(state.Ready())
+				}
+				if uh.gooseRow != nil {
+					uh.gooseRow.SetSubtitle(state.Subtitle(facts.ActiveModel))
+				}
+				uh.toastAdder.ShowErrorToast("Goose cannot be launched: " + state.MissingPrerequisite())
+			})
+			return
+		}
+
+		dryRun := dryrun.Enabled()
+		launchErr := agentmode.Launch(ctx, facts.ActiveModel, func(asyncErr error) {
+			sgtk.RunOnMainThread(func() {
+				log.Printf("views: goose desktop exited with error: %v", asyncErr)
+				uh.toastAdder.ShowErrorToast("Goose Desktop encountered an error.")
+			})
+		})
+
+		sgtk.RunOnMainThread(func() {
+			uh.gooseGate.Reset()
+			setActivitySpinner(uh.gooseSpinner, false)
+			if uh.gooseLaunchBtn != nil {
+				uh.gooseLaunchBtn.SetSensitive(state.Ready())
+			}
+			if uh.gooseRow != nil {
+				uh.gooseRow.SetSubtitle(state.Subtitle(facts.ActiveModel))
+			}
+			if launchErr != nil {
+				log.Printf("views: launch goose desktop failed: %v", launchErr)
+				uh.toastAdder.ShowErrorToast("Failed to launch Goose Desktop.")
+				return
+			}
+			if dryRun {
+				uh.toastAdder.ShowToast("[DRY-RUN] Would launch Goose Desktop")
+			}
+		})
+	}()
+}

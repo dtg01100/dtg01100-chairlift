@@ -2185,6 +2185,20 @@ There is no separate Go client library dependency for bootc: status/stage types 
 
 - [Package Manager Wrappers](./package-managers.md) — Homebrew (including tap trust), Flatpak, bootc, and Updex wrapper details
 
+### Agent Mode and Ask Bluefin (`internal/agentmode`, `internal/aistack`)
+
+`internal/agentmode` coordinates Agent Mode's client integration, readiness evaluation, and the `chairlift --ask-bluefin` dispatcher.
+
+Goose Desktop (`ublue-os/tap/goose-linux`) is the Agent Mode desktop GUI. Rather than writing or rewriting Goose's persistent provider configuration (`~/.config/goose/config.yaml`), ChairLift launches Goose Desktop through llmman's invocation-scoped integration:
+`llmman launch goose-desktop --model <active-model>`.
+This passes the model, endpoint, and invocation environment without mutating the user's persistent configuration.
+
+Launching Goose requires all readiness prerequisites to be satisfied:
+- llmman daemon is healthy (`aistack.Healthy`)
+- An active model is selected (`aistack.ReadActiveModel`)
+- Goose Desktop and `linux-mcp-server` are installed (`goose-desktop` and `linux-mcp-server` resolving on `$PATH` or via Homebrew)
+- Goose's Linux diagnostic extension is verified: stdio transport, enabled, real executable, literal `--toolset FIXED`, and no SSH defaults (`troubleshoot.VerifyExtensionOnDisk`).
+
 ## Explicit setup flow
 
 Setup never opens automatically. `--setup`, its `--first-run` alias, and the

@@ -263,10 +263,74 @@ func Steps() []Step {
 	}
 }
 
-// runSetup is an injection seam for connecting the diagnostic extension.
-var runSetup = defaultRunSetup
+// ExtensionStatus represents the classification of the Linux diagnostic extension
+// in Goose's configuration.
+type ExtensionStatus int
 
-func defaultRunSetup() error {
+const (
+	// ExtensionStatusMissing: No Goose config or extension is not defined.
+	ExtensionStatusMissing ExtensionStatus = iota
+	// ExtensionStatusMalformed: Config exists but contains invalid YAML or invalid mapping.
+	ExtensionStatusMalformed
+	// ExtensionStatusUnsafe: Extension exists but violates security policies (SSH key, not stdio, missing FIXED toolset).
+	ExtensionStatusUnsafe
+	// ExtensionStatusValid: Extension exists, is enabled, stdio, points to linux-mcp-server with --toolset FIXED and no SSH.
+	ExtensionStatusValid
+)
+
+// ClassifyConfig evaluates raw Goose configuration YAML bytes and returns its ExtensionStatus.
+func ClassifyConfig(data []byte, fileExists bool) ExtensionStatus {
+	if !fileExists || len(bytes.TrimSpace(data)) == 0 {
+		return ExtensionStatusMissing
+	}
+	document, err := decodeConfig(data)
+	if err != nil {
+		return ExtensionStatusMalformed
+	}
+	var cfg gooseConfig
+	if err := document.Decode(&cfg); err != nil {
+		return ExtensionStatusMalformed
+	}
+	for _, key := range diagnosticExtensionKeys {
+		ext, ok := cfg.Extensions[key]
+		if !ok {
+			continue
+		}
+		if !ext.enabled() || !ext.valid() {
+			return ExtensionStatusUnsafe
+		}
+		return ExtensionStatusValid
+	}
+	return ExtensionStatusMissing
+}
+
+// VerifyExtensionOnDisk checks the current user's Goose configuration file and
+// verifies that the Linux diagnostic extension is configured and its command resolves.
+func VerifyExtensionOnDisk() ExtensionStatus {
+	data, err := readConfig()
+	if err != nil {
+		if os.IsNotExist(err) {
+			return ExtensionStatusMissing
+		}
+		return ExtensionStatusMalformed
+	}
+	status := ClassifyConfig(data, true)
+	if status != ExtensionStatusValid {
+		return status
+	}
+	parsed := ParseConfig(data)
+	for _, cmd := range parsed.commands {
+		if cmd != "" && !lookPath(cmd) {
+			return ExtensionStatusUnsafe
+		}
+	}
+	return ExtensionStatusValid
+}
+
+// EnsureDiagnosticsConfigured writes the hardened Linux diagnostic extension into
+// Goose's configuration, preserving existing user settings, models, providers, and
+// other extensions. It verifies the written configuration before returning.
+func EnsureDiagnosticsConfigured() error {
 	path, err := ConfigPath()
 	if err != nil {
 		return err
@@ -307,6 +371,13 @@ func defaultRunSetup() error {
 		return fmt.Errorf("linux tools could not be verified in Goose; check its configuration")
 	}
 	return nil
+}
+
+// runSetup is an injection seam for connecting the diagnostic extension.
+var runSetup = EnsureDiagnosticsConfigured
+
+func defaultRunSetup() error {
+	return EnsureDiagnosticsConfigured()
 }
 
 // Setup runs every step that still has work to do, reporting progress as it

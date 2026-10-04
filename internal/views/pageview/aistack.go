@@ -80,3 +80,11 @@ func AgentModePresetsSubtitle() string {
 func AgentModeSwitchPresetLabel() string {
 	return "Choose…"
 }
+
+func GooseRowTitle() string {
+	return "Goose"
+}
+
+func GooseLaunchButtonLabel() string {
+	return "Launch"
+}

@@ -762,7 +762,8 @@ An agent must not break these:
   staging keeps its existing fixed `bootc-update-stage` path.
 - **Agent Mode is local, unprivileged, and reports observed readiness.**
   `agents_page` has one Agent Mode switch, visible model and preset controls,
-  and the local API address. Unready model controls stay
+  the local API address, a Goose Desktop row with a Launch action, and a
+  "Show Ask Bluefin in menu" preference. Unready model and launch controls stay
   visible and insensitive instead of disappearing. Peer/offload controls and
   their backend are removed; this surface manages this computer only.
   `internal/aistack` owns three artifacts: the generated installation Brewfile,
@@ -796,6 +797,11 @@ An agent must not break these:
   unit and fragment, keeping binaries and models. A failed stop that
   cannot prove the service inactive preserves both files and the management
   handle. There is no pkexec route, Homebrew service, or container stack.
+  Goose Desktop (`ublue-os/tap/goose-linux`) is the Agent Mode desktop GUI,
+  launched via `llmman launch goose-desktop --model <active-model>` without
+  persisting provider or model into Goose's configuration. It requires the
+  hardened `linux-mcp-server` extension verified on disk: stdio transport,
+  enabled, real executable, literal `--toolset FIXED`, and no SSH defaults.
 - **Printer applications are rootless quadlets, locked until their
   administration is authenticated, and never a false enabled indicator.**
   `internal/printerapp` writes one `.container` quadlet per driver family
