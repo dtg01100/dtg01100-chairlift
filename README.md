@@ -376,6 +376,10 @@ and cause. Fix the file and restart Control Center. If every candidate is absent
 the built-in defaults apply. Legacy `system_page` settings are validated and
 migrated in memory to Updates where applicable; see
 [legacy configuration compatibility](CONFIG.md#legacy-system-page-compatibility).
+Retired v0.12.x `maintenance_page`, `updates_page`, and `features_page` groups
+are also validated, then ignored (`features_page.troubleshooting_group` is
+migrated to Help); see
+[legacy group compatibility](CONFIG.md#legacy-maintenance-updates-and-features-group-compatibility).
 
 ---
 

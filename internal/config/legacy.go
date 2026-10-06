@@ -49,9 +49,10 @@ var legacyUpdatesGroups = []string{
 }
 
 // legacyFeaturesGroups names the features_page entries carried by
-// pre-26.09 Bluefin releases (v0.12.x) and moved or removed by 4141e8c:
-// ai_group was retired when the Local AI destination moved to its own
-// Agents page, and troubleshooting_group moved to help_page. Pre-26.09 host
+// pre-26.09 Bluefin releases (v0.12.x) and since moved or removed:
+// ai_group was retired by 4141e8c when the Local AI destination moved to
+// its own Agents page, and troubleshooting_group was moved to help_page by
+// c594a4e. Pre-26.09 host
 // files that have not been refreshed still ship
 // /usr/share/chairlift/config.yml with these groups in place; accepting
 // them keeps those hosts runnable without re-activating the old features
@@ -105,7 +106,7 @@ func stripLegacyGroups(top *yaml.Node) {
 }
 
 // migrateLegacyFeaturesPage moves a pre-26.09 features_page
-// troubleshooting_group to help_page, where 4141e8c relocated it, with the
+// troubleshooting_group to help_page, where c594a4e relocated it, with the
 // same precedence as the system_page migration: current non-null help_page
 // fields win. This preserves an administrator's explicit opt-out. It runs
 // after validation and before stripLegacyGroups removes the old copy.
