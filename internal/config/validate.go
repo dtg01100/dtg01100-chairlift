@@ -201,8 +201,8 @@ func validateGroupEntries(src configSource, page string, groupsNode *yaml.Node) 
 	if err != nil {
 		return validatorSchemaGroupsError(src.path, err)
 	}
-	if page == "maintenance_page" {
-		groups = append(append([]string(nil), groups...), legacyMaintenanceGroups...)
+	if extra := legacyGroupNames(page); len(extra) > 0 {
+		groups = append(append([]string(nil), groups...), extra...)
 	}
 	return validateNamedGroupEntries(src, groups, groupsNode)
 }

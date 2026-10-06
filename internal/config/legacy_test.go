@@ -217,3 +217,186 @@ func TestLegacyMaintenanceGroupsOnlyAreStripped(t *testing.T) {
 		}
 	}
 }
+
+// TestLegacyUpdatesGroupsIgnoredWithoutSchemaError mirrors the maintenance
+// coverage: pre-26.09 host files carry update_all_group and
+// sysupdate_updates_group on updates_page; the validator treats them as
+// known names, the strip pass removes them before runtime decoding.
+func TestLegacyUpdatesGroupsIgnoredWithoutSchemaError(t *testing.T) {
+	data := `updates_page:
+  update_all_group:
+    enabled: true
+  sysupdate_updates_group:
+    enabled: true
+  automatic_updates_group:
+    enabled: false
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	for _, retired := range legacyUpdatesGroups {
+		if _, present := cfg.UpdatesPage[retired]; present {
+			t.Errorf("legacy updates group %q reached runtime Config", retired)
+		}
+	}
+	if cfg.UpdatesPage["automatic_updates_group"].Enabled {
+		t.Fatal("automatic_updates_group was not set to false")
+	}
+}
+
+// TestLegacyUpdatesGroupsUnknownFieldsStillFailClosed verifies that
+// unknown fields under a retired updates_page group, and a typo of a
+// retired name, still fail closed — the compatibility rule must not
+// conceal broken configurations.
+func TestLegacyUpdatesGroupsUnknownFieldsStillFailClosed(t *testing.T) {
+	for _, data := range []string{
+		"updates_page: {update_all_grup: {enabled: true}}",
+		"updates_page: {update_all_group: {unknown: true}}",
+		"updates_page: {update_all_group: []}",
+		"updates_page: {sysupdate_updates_group: {enabled: []}}",
+		"updates_page: {update_all_group: 42}",
+	} {
+		t.Run(data, func(t *testing.T) {
+			path := writeConfigFile(t, data)
+			withConfigPaths(t, []string{path, "must-not-read.yml"})
+			cfg, err := Load()
+			if err == nil || err.Path != path {
+				t.Fatalf("error = %v, want authoritative failure", err)
+			}
+			assertAllKnownGroupsDisabled(t, cfg)
+		})
+	}
+}
+
+// TestLegacyUpdatesGroupsOnlyAreStripped ensures retired groups are
+// removed but canonical neighbors (e.g. automatic_updates_group) keep
+// their enabled state and order.
+func TestLegacyUpdatesGroupsOnlyAreStripped(t *testing.T) {
+	data := `updates_page:
+  automatic_updates_group:
+    enabled: true
+  update_all_group:
+    enabled: true
+  bootc_updates_group:
+    enabled: true
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	if !cfg.UpdatesPage["automatic_updates_group"].Enabled {
+		t.Fatal("automatic_updates_group should remain enabled")
+	}
+	if !cfg.UpdatesPage["bootc_updates_group"].Enabled {
+		t.Fatal("bootc_updates_group should remain enabled")
+	}
+	for _, retired := range legacyUpdatesGroups {
+		if _, present := cfg.UpdatesPage[retired]; present {
+			t.Errorf("legacy updates group %q reached runtime Config", retired)
+		}
+	}
+}
+
+// TestLegacyFeaturesGroupsIgnoredWithoutSchemaError mirrors the maintenance
+// coverage for the pre-26.09 ai_group under features_page: known name,
+// stripped before runtime, canonical neighbors preserved.
+func TestLegacyFeaturesGroupsIgnoredWithoutSchemaError(t *testing.T) {
+	data := `features_page:
+  ai_group:
+    enabled: true
+  dx_group:
+    enabled: false
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	for _, retired := range legacyFeaturesGroups {
+		if _, present := cfg.FeaturesPage[retired]; present {
+			t.Errorf("legacy features group %q reached runtime Config", retired)
+		}
+	}
+	if cfg.FeaturesPage["dx_group"].Enabled {
+		t.Fatal("dx_group was not set to false")
+	}
+}
+
+// TestLegacyFeaturesGroupsUnknownFieldsStillFailClosed verifies that
+// unknown fields under ai_group, and a typo of the retired name, still
+// fail closed.
+func TestLegacyFeaturesGroupsUnknownFieldsStillFailClosed(t *testing.T) {
+	for _, data := range []string{
+		"features_page: {ai_grup: {enabled: true}}",
+		"features_page: {ai_group: {unknown: true}}",
+		"features_page: {ai_group: []}",
+		"features_page: {ai_group: {enabled: []}}",
+		"features_page: {ai_group: 42}",
+	} {
+		t.Run(data, func(t *testing.T) {
+			path := writeConfigFile(t, data)
+			withConfigPaths(t, []string{path, "must-not-read.yml"})
+			cfg, err := Load()
+			if err == nil || err.Path != path {
+				t.Fatalf("error = %v, want authoritative failure", err)
+			}
+			assertAllKnownGroupsDisabled(t, cfg)
+		})
+	}
+}
+
+// TestLegacyFeaturesGroupsOnlyAreStripped ensures the retired ai_group
+// is removed but canonical neighbors keep their enabled state and order.
+func TestLegacyFeaturesGroupsOnlyAreStripped(t *testing.T) {
+	data := `features_page:
+  features_group:
+    enabled: true
+  ai_group:
+    enabled: true
+  dx_group:
+    enabled: true
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	if !cfg.FeaturesPage["features_group"].Enabled {
+		t.Fatal("features_group should remain enabled")
+	}
+	if !cfg.FeaturesPage["dx_group"].Enabled {
+		t.Fatal("dx_group should remain enabled")
+	}
+	for _, retired := range legacyFeaturesGroups {
+		if _, present := cfg.FeaturesPage[retired]; present {
+			t.Errorf("legacy features group %q reached runtime Config", retired)
+		}
+	}
+}
+
+// TestLegacyGroupsAcrossPagesDoNotInterfere ensures the per-page allowlist
+// does not let a retired name leak into a different page: e.g.
+// update_all_group inside updates_page is accepted, but update_all_group
+// inside features_page is unknown and fails closed. The reverse holds for
+// the other retired names too. This guards the per-page scoping against
+// accidental relaxation.
+func TestLegacyGroupsAcrossPagesDoNotInterfere(t *testing.T) {
+	for _, data := range []string{
+		"features_page: {update_all_group: {enabled: true}}",
+		"features_page: {sysupdate_updates_group: {enabled: true}}",
+		"features_page: {maintenance_brew_group: {enabled: true}}",
+		"updates_page: {maintenance_brew_group: {enabled: true}}",
+		"updates_page: {ai_group: {enabled: true}}",
+		"maintenance_page: {update_all_group: {enabled: true}}",
+		"maintenance_page: {ai_group: {enabled: true}}",
+	} {
+		t.Run(data, func(t *testing.T) {
+			path := writeConfigFile(t, data)
+			withConfigPaths(t, []string{path, "must-not-read.yml"})
+			cfg, err := Load()
+			if err == nil || err.Path != path {
+				t.Fatalf("error = %v, want authoritative failure", err)
+			}
+			assertAllKnownGroupsDisabled(t, cfg)
+		})
+	}
+}

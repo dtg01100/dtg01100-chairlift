@@ -76,21 +76,30 @@ are accepted but have no runtime effect. The System page is not restored.
 
 All four legacy groups still undergo ordinary field, type, and action
 validation, including trusted-path restrictions on `sudo: true`, even for
-retired or superseded values. Unknown names still fail closed. This is a
-compatibility rule for `system_page`, not general acceptance of obsolete keys
-elsewhere in an old file. No file is rewritten: administrators can move the
-two surviving groups to `updates_page` and remove `system_page` when convenient.
+retired or superseded values. Unknown names still fail closed. No file is
+rewritten: administrators can move the two surviving groups to `updates_page`
+and remove `system_page` when convenient.
 
-## Legacy Maintenance page groups compatibility
+## Legacy Maintenance, Updates, and Features group compatibility
 
-Older files (such as maintainer defaults shipped with 26.09-alpha Bluefin
-images) may specify `maintenance_brew_group`, `maintenance_flatpak_group`, or
-`maintenance_optimization_group`. These retired groups are accepted as known
-names, undergo the same field, type, and `sudo` validation as the current
-groups, and are stripped from the configuration prior to runtime decoding so
-they have no runtime effect and do not trigger the fail-closed schema error
-that would otherwise disable every feature group. Routine cleanup is handled
-by `maintenance_freespace_group` and `maintenance_cleanup_group`.
+Older files carried by pre-26.09 Bluefin releases (the v0.12.x series) and
+removed by the 26.09-alpha Control Center reorganisation may still specify
+groups whose current schema no longer names:
+
+- `updates_page`: `update_all_group`, `sysupdate_updates_group`
+- `features_page`: `ai_group`
+- `maintenance_page`: `maintenance_brew_group`, `maintenance_flatpak_group`,
+  `maintenance_optimization_group`
+
+These retired groups are accepted as known names, undergo the same field,
+type, and `sudo` validation as the current groups on the same page, and are
+stripped from the configuration prior to runtime decoding so they have no
+runtime effect and do not trigger the fail-closed schema error that would
+otherwise disable every feature group. Unknown names on the same page still
+fail closed — the rule is a per-page compatibility exception, not general
+acceptance of arbitrary obsolete keys. Routine cleanup is handled by
+`maintenance_freespace_group` and `maintenance_cleanup_group`; the
+unattended-update switch is `updates_page.automatic_updates_group`.
 
 ## Available Pages and Groups
 

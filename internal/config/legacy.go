@@ -17,43 +17,102 @@ func validateLegacySystemPage(src configSource, value *yaml.Node) *LoadError {
 	}, value)
 }
 
-// legacyMaintenanceGroups names the maintenance_page entries carried by the
-// 26.09 alphas and removed when maintenance was consolidated into
-// maintenance_cleanup_group / maintenance_freespace_group / reset_group.
-// Installed hosts still ship /usr/share/chairlift/config.yml with these
-// groups in place; accepting the names without ever activating the
-// underlying behavior keeps those hosts runnable while a single source of
-// truth for the cleanup actions lives in the current schema.
+// legacyMaintenanceGroups names the maintenance_page entries carried by
+// pre-26.09 Bluefin releases (v0.12.x) and removed by 4141e8c when
+// maintenance was consolidated into maintenance_cleanup_group /
+// maintenance_freespace_group / reset_group. Installed hosts still ship
+// /usr/share/chairlift/config.yml with these groups in place; accepting
+// the names without ever activating the underlying behavior keeps those
+// hosts runnable while a single source of truth for the cleanup actions
+// lives in the current schema.
 var legacyMaintenanceGroups = []string{
 	"maintenance_brew_group",
 	"maintenance_flatpak_group",
 	"maintenance_optimization_group",
 }
 
-// stripLegacyMaintenanceGroups removes retired maintenance_page groups
-// from the AST prior to decoding so they never reach runtime Config.
-// Validation has already accepted them as known, so the strip cannot
-// hide a shape or value error; an undeclared field under a retired
-// group name still fails closed before this runs.
+// legacyUpdatesGroups names the updates_page entries carried by
+// pre-26.09 Bluefin releases (v0.12.x) and removed by 4141e8c when the
+// Update All coordinator absorbed update_all_group, sysupdate_updates_group
+// was folded into the per-provider groups, and automatic_updates_group
+// took its place as the schedule switch. Pre-26.09 host files that have
+// not been refreshed still ship /usr/share/chairlift/config.yml with
+// these names; accepting them keeps those hosts runnable without
+// re-activating the old behavior.
+var legacyUpdatesGroups = []string{
+	"update_all_group",
+	"sysupdate_updates_group",
+}
+
+// legacyFeaturesGroups names the features_page entries carried by
+// pre-26.09 Bluefin releases (v0.12.x) and removed by 4141e8c when the
+// Local AI destination moved to its own Agents page. Pre-26.09 host
+// files that have not been refreshed still ship
+// /usr/share/chairlift/config.yml with this group in place; accepting it
+// keeps those hosts runnable without re-activating the old features
+// layout.
+var legacyFeaturesGroups = []string{
+	"ai_group",
+}
+
+// legacyGroupNames returns the legacy group names accepted alongside the
+// canonical schema for the given page. Returns nil when no page-specific
+// compatibility names exist for the page, which is the common case.
+func legacyGroupNames(page string) []string {
+	switch page {
+	case "maintenance_page":
+		return legacyMaintenanceGroups
+	case "updates_page":
+		return legacyUpdatesGroups
+	case "features_page":
+		return legacyFeaturesGroups
+	default:
+		return nil
+	}
+}
+
+// stripLegacyMaintenanceGroups removes retired maintenance_page,
+// updates_page, and features_page groups from the AST prior to decoding
+// so they never reach runtime Config. Validation has already accepted
+// them as known, so the strip cannot hide a shape or value error; an
+// undeclared field under a retired group name still fails closed before
+// this runs.
+//
+// Renamed from the original maintenance-only form to reflect the wider
+// scope; the previous single-page stripper is preserved as
+// stripLegacyGroupFromPage for reuse from the generic strip pass.
 func stripLegacyMaintenanceGroups(top *yaml.Node) {
-	maint := mappingValue(top, "maintenance_page")
-	if maint == nil || maint.Kind != yaml.MappingNode {
+	for _, page := range []string{"maintenance_page", "updates_page", "features_page"} {
+		stripLegacyGroupFromPage(top, page, legacyGroupNames(page))
+	}
+}
+
+// stripLegacyGroupFromPage removes every retired group listed under a
+// page's mapping value. The page node is left in place (with its other
+// canonical groups intact); only the legacy names vanish. A nil page
+// node or one whose value is not a mapping is a no-op.
+func stripLegacyGroupFromPage(top *yaml.Node, page string, retired []string) {
+	if len(retired) == 0 {
 		return
 	}
-	retired := make(map[string]bool, len(legacyMaintenanceGroups))
-	for _, g := range legacyMaintenanceGroups {
-		retired[g] = true
+	pageNode := mappingValue(top, page)
+	if pageNode == nil || pageNode.Kind != yaml.MappingNode {
+		return
 	}
-	newContent := make([]*yaml.Node, 0, len(maint.Content))
-	for i := 0; i+1 < len(maint.Content); i += 2 {
-		key := maint.Content[i]
-		val := maint.Content[i+1]
-		if retired[key.Value] {
+	retiredSet := make(map[string]bool, len(retired))
+	for _, g := range retired {
+		retiredSet[g] = true
+	}
+	newContent := make([]*yaml.Node, 0, len(pageNode.Content))
+	for i := 0; i+1 < len(pageNode.Content); i += 2 {
+		key := pageNode.Content[i]
+		val := pageNode.Content[i+1]
+		if retiredSet[key.Value] {
 			continue
 		}
 		newContent = append(newContent, key, val)
 	}
-	maint.Content = newContent
+	pageNode.Content = newContent
 }
 
 // migrateLegacySystemPage runs only after source-graph and schema validation.

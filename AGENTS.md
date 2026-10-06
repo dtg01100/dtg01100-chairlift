@@ -648,11 +648,13 @@ An agent must not break these:
   `bootc_status_group` and `channel_group` into Updates. Current non-null
   fields win; retired information/health groups have no runtime effect.
   The retired `maintenance_page` groups (`maintenance_brew_group`,
-  `maintenance_flatpak_group`, `maintenance_optimization_group`) carried by
-  26.09-alpha maintainer defaults are accepted by the same rule, validated
-  for shape/typo/sudo, and stripped prior to runtime decoding so they never
-  re-enable removed behavior. This must not add a navigable page or relax
-  unknown-name or sudo validation.
+  `maintenance_flatpak_group`, `maintenance_optimization_group`),
+  `updates_page` groups (`update_all_group`, `sysupdate_updates_group`), and
+  `features_page` group (`ai_group`) carried by pre-26.09 Bluefin releases
+  (v0.12.x) and removed by the 26.09-alpha Control Center reorganisation are
+  accepted by the same per-page rule, validated for shape/typo/sudo, and
+  stripped prior to runtime decoding so they never re-enable removed behavior.
+  This must not add a navigable page or relax unknown-name or sudo validation.
 - **CI action authority.** Third-party `.github/workflows/` actions use full
   40-character commit SHAs with reviewed version comments. Local `./` actions
   are exempt. Shared `projectbluefin/actions` production interfaces use managed
