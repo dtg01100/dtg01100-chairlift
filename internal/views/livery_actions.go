@@ -701,6 +701,15 @@ func liverySelectionSource(surface livery.Surface, id string) livery.Source {
 
 // setLiverySectionSensitive follows the section's master switch, so a
 // selection cannot be changed for a mark that is not being set.
+//
+// The Panel case multiplies by liveryPanelAvailable to mirror the formula
+// applyLiveryState uses on load, where the rotate row is sensitive only when
+// the Custom Command Menu extension is installed. finishLiveryToggle calls
+// setLiveryToggleState first, so liveryState.PanelEnabled is already the
+// caller's `enabled` by the time this runs; syncLiveryRotateSensitive then
+// sees the same panelAvailable && state.PanelEnabled the load path
+// computed, so the toggle-completion handler refreshes the rotate row on
+// the main thread the same way the load pass did (issue #496).
 func (uh *UserHome) setLiverySectionSensitive(s livery.Surface, enabled bool) {
 	switch s {
 	case livery.AppGrid:
@@ -708,13 +717,14 @@ func (uh *UserHome) setLiverySectionSensitive(s livery.Surface, enabled bool) {
 			uh.liveryAppGridRow.SetSensitive(enabled)
 		}
 	case livery.Panel:
+		panelAvailable := uh.liveryPanelAvailable && enabled
 		if uh.liveryPanelMarkRow != nil {
-			uh.liveryPanelMarkRow.SetSensitive(enabled)
+			uh.liveryPanelMarkRow.SetSensitive(panelAvailable)
 		}
 		if uh.liveryFoundationGrid != nil {
-			uh.liveryFoundationGrid.SetSensitive(enabled)
+			uh.liveryFoundationGrid.SetSensitive(panelAvailable)
 		}
-		uh.syncLiveryRotateSensitive(s, enabled)
+		uh.syncLiveryRotateSensitive(s, panelAvailable)
 	default:
 		if uh.liveryDockSelectedRow != nil {
 			uh.liveryDockSelectedRow.SetSensitive(enabled)
