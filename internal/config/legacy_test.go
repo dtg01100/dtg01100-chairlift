@@ -388,6 +388,88 @@ func TestLegacyGroupsAcrossPagesDoNotInterfere(t *testing.T) {
 		"updates_page: {ai_group: {enabled: true}}",
 		"maintenance_page: {update_all_group: {enabled: true}}",
 		"maintenance_page: {ai_group: {enabled: true}}",
+		"updates_page: {troubleshooting_group: {enabled: true}}",
+	} {
+		t.Run(data, func(t *testing.T) {
+			path := writeConfigFile(t, data)
+			withConfigPaths(t, []string{path, "must-not-read.yml"})
+			cfg, err := Load()
+			if err == nil || err.Path != path {
+				t.Fatalf("error = %v, want authoritative failure", err)
+			}
+			assertAllKnownGroupsDisabled(t, cfg)
+		})
+	}
+}
+
+// TestLegacyFeaturesPageV012Shape loads the features_page layout shipped by
+// v0.12.x: ai_group with its retired ai_images/ai_model fields, and
+// troubleshooting_group before it moved to help_page.
+func TestLegacyFeaturesPageV012Shape(t *testing.T) {
+	data := `features_page:
+  features_group:
+    enabled: true
+  ai_group:
+    enabled: true
+    ai_images:
+      nvidia: registry.example.internal/ramalama/cuda:latest
+    ai_model: ollama://qwen2.5:7b
+  troubleshooting_group:
+    enabled: false
+help_page:
+  help_resources_group:
+    enabled: true
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	for _, retired := range legacyFeaturesGroups {
+		if _, present := cfg.FeaturesPage[retired]; present {
+			t.Errorf("legacy features group %q reached runtime Config", retired)
+		}
+	}
+	group, present := cfg.HelpPage["troubleshooting_group"]
+	if !present {
+		t.Fatal("troubleshooting_group missing from help_page")
+	}
+	if group.Enabled {
+		t.Fatal("features_page troubleshooting_group opt-out was not migrated to help_page")
+	}
+	if !cfg.HelpPage["help_resources_group"].Enabled {
+		t.Fatal("help_resources_group should remain enabled")
+	}
+}
+
+// TestLegacyTroubleshootingGroupCurrentFieldsWin verifies an explicit
+// help_page value takes precedence over the migrated features_page copy.
+func TestLegacyTroubleshootingGroupCurrentFieldsWin(t *testing.T) {
+	data := `features_page:
+  troubleshooting_group:
+    enabled: false
+help_page:
+  troubleshooting_group:
+    enabled: true
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	if !cfg.HelpPage["troubleshooting_group"].Enabled {
+		t.Fatal("current help_page troubleshooting_group value did not win")
+	}
+}
+
+// TestLegacyAIGroupFieldsStillFailClosed verifies the retired ai_group
+// fields are type-checked and are not accepted on any other group.
+func TestLegacyAIGroupFieldsStillFailClosed(t *testing.T) {
+	for _, data := range []string{
+		"features_page: {ai_group: {ai_model: [a]}}",
+		"features_page: {ai_group: {ai_images: [a]}}",
+		"features_page: {ai_group: {ai_images: {nvidia: [a]}}}",
+		"features_page: {dx_group: {ai_model: x}}",
+		"features_page: {troubleshooting_group: {ai_model: x}}",
+		"agents_page: {ai_group: {ai_model: x}}",
 	} {
 		t.Run(data, func(t *testing.T) {
 			path := writeConfigFile(t, data)

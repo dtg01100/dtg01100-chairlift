@@ -87,7 +87,8 @@ removed by the 26.09-alpha Control Center reorganisation may still specify
 groups whose current schema no longer names:
 
 - `updates_page`: `update_all_group`, `sysupdate_updates_group`
-- `features_page`: `ai_group`
+- `features_page`: `ai_group` (including its retired `ai_images` and
+  `ai_model` fields), `troubleshooting_group`
 - `maintenance_page`: `maintenance_brew_group`, `maintenance_flatpak_group`,
   `maintenance_optimization_group`
 
@@ -95,9 +96,12 @@ These retired groups are accepted as known names, undergo the same field,
 type, and `sudo` validation as the current groups on the same page, and are
 stripped from the configuration prior to runtime decoding so they have no
 runtime effect and do not trigger the fail-closed schema error that would
-otherwise disable every feature group. Unknown names on the same page still
-fail closed — the rule is a per-page compatibility exception, not general
-acceptance of arbitrary obsolete keys. Routine cleanup is handled by
+otherwise disable every feature group. `features_page.troubleshooting_group`
+moved rather than retired: like the System page groups, it supplies omitted or
+null fields of `help_page.troubleshooting_group`, so an explicit opt-out is
+kept and explicit current values take precedence. Unknown names on the same
+page still fail closed — the rule is a per-page compatibility exception, not
+general acceptance of arbitrary obsolete keys. Routine cleanup is handled by
 `maintenance_freespace_group` and `maintenance_cleanup_group`; the
 unattended-update switch is `updates_page.automatic_updates_group`.
 

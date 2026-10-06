@@ -1,6 +1,10 @@
 package config
 
-import "gopkg.in/yaml.v3"
+import (
+	"reflect"
+
+	"gopkg.in/yaml.v3"
+)
 
 // system_page is a compatibility input, not a navigable page. Validate its
 // historical inventory before migration, including values later superseded
@@ -12,7 +16,7 @@ func validateLegacySystemPage(src configSource, value *yaml.Node) *LoadError {
 	if value.Kind != yaml.MappingNode {
 		return validatorPageValueShapeError(src.path, "system_page", value)
 	}
-	return validateNamedGroupEntries(src, []string{
+	return validateNamedGroupEntries(src, "system_page", []string{
 		"system_info_group", "bootc_status_group", "channel_group", "health_group",
 	}, value)
 }
@@ -45,14 +49,32 @@ var legacyUpdatesGroups = []string{
 }
 
 // legacyFeaturesGroups names the features_page entries carried by
-// pre-26.09 Bluefin releases (v0.12.x) and removed by 4141e8c when the
-// Local AI destination moved to its own Agents page. Pre-26.09 host
+// pre-26.09 Bluefin releases (v0.12.x) and moved or removed by 4141e8c:
+// ai_group was retired when the Local AI destination moved to its own
+// Agents page, and troubleshooting_group moved to help_page. Pre-26.09 host
 // files that have not been refreshed still ship
-// /usr/share/chairlift/config.yml with this group in place; accepting it
-// keeps those hosts runnable without re-activating the old features
-// layout.
+// /usr/share/chairlift/config.yml with these groups in place; accepting
+// them keeps those hosts runnable without re-activating the old features
+// layout. troubleshooting_group is migrated to help_page (see
+// migrateLegacyFeaturesPage) before the features_page copy is stripped.
 var legacyFeaturesGroups = []string{
 	"ai_group",
+	"troubleshooting_group",
+}
+
+// legacyGroupFieldTypes returns the retired fields a legacy group accepted
+// in pre-26.09 releases, keyed by YAML name with their historical Go types,
+// so validation can type-check them. Only ai_group carried such fields
+// (ai_images, ai_model); the group is stripped before decoding, so they
+// never reach runtime Config.
+func legacyGroupFieldTypes(page, group string) map[string]reflect.Type {
+	if page == "features_page" && group == "ai_group" {
+		return map[string]reflect.Type{
+			"ai_images": reflect.TypeOf(map[string]string{}),
+			"ai_model":  reflect.TypeOf(""),
+		}
+	}
+	return nil
 }
 
 // legacyGroupNames returns the legacy group names accepted alongside the
@@ -71,20 +93,28 @@ func legacyGroupNames(page string) []string {
 	}
 }
 
-// stripLegacyMaintenanceGroups removes retired maintenance_page,
-// updates_page, and features_page groups from the AST prior to decoding
-// so they never reach runtime Config. Validation has already accepted
-// them as known, so the strip cannot hide a shape or value error; an
-// undeclared field under a retired group name still fails closed before
-// this runs.
-//
-// Renamed from the original maintenance-only form to reflect the wider
-// scope; the previous single-page stripper is preserved as
-// stripLegacyGroupFromPage for reuse from the generic strip pass.
-func stripLegacyMaintenanceGroups(top *yaml.Node) {
+// stripLegacyGroups removes retired maintenance_page, updates_page, and
+// features_page groups from the AST prior to decoding so they never reach
+// runtime Config. Validation has already accepted them as known, so the
+// strip cannot hide a shape or value error; an undeclared field under a
+// retired group name still fails closed before this runs.
+func stripLegacyGroups(top *yaml.Node) {
 	for _, page := range []string{"maintenance_page", "updates_page", "features_page"} {
 		stripLegacyGroupFromPage(top, page, legacyGroupNames(page))
 	}
+}
+
+// migrateLegacyFeaturesPage moves a pre-26.09 features_page
+// troubleshooting_group to help_page, where 4141e8c relocated it, with the
+// same precedence as the system_page migration: current non-null help_page
+// fields win. This preserves an administrator's explicit opt-out. It runs
+// after validation and before stripLegacyGroups removes the old copy.
+func migrateLegacyFeaturesPage(top *yaml.Node) {
+	legacy := mappingValue(top, "features_page")
+	if legacy == nil || legacy.Kind != yaml.MappingNode {
+		return
+	}
+	migrateLegacyGroup(top, legacy, "help_page", "troubleshooting_group")
 }
 
 // stripLegacyGroupFromPage removes every retired group listed under a
@@ -125,32 +155,39 @@ func migrateLegacySystemPage(top *yaml.Node) {
 	if legacy == nil || legacy.Kind != yaml.MappingNode {
 		return
 	}
-	updates := mappingValue(top, "updates_page")
 	for _, name := range []string{"bootc_status_group", "channel_group"} {
-		group := mappingValue(legacy, name)
-		if group == nil || group.Kind != yaml.MappingNode {
-			continue
-		}
-		if updates == nil {
-			updates = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-			top.Content = append(top.Content, stringKey("updates_page"), updates)
-		} else if updates.Kind != yaml.MappingNode {
-			*updates = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-		}
-		current := mappingValue(updates, name)
-		if current == nil {
-			updates.Content = append(updates.Content, stringKey(name), group)
-		} else if current.Kind != yaml.MappingNode {
-			*current = *group
-		} else {
-			for i := 0; i < len(group.Content); i += 2 {
-				key, value := group.Content[i], group.Content[i+1]
-				field := mappingValue(current, key.Value)
-				if field == nil {
-					current.Content = append(current.Content, key, value)
-				} else if field.Tag == "!!null" {
-					*field = *value
-				}
+		migrateLegacyGroup(top, legacy, "updates_page", name)
+	}
+}
+
+// migrateLegacyGroup overlays legacy[name] onto top[toPage][name], creating
+// the page or group when absent. Current non-null fields win; nulls are
+// no-op overlays.
+func migrateLegacyGroup(top, legacy *yaml.Node, toPage, name string) {
+	group := mappingValue(legacy, name)
+	if group == nil || group.Kind != yaml.MappingNode {
+		return
+	}
+	target := mappingValue(top, toPage)
+	if target == nil {
+		target = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		top.Content = append(top.Content, stringKey(toPage), target)
+	} else if target.Kind != yaml.MappingNode {
+		*target = yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	}
+	current := mappingValue(target, name)
+	if current == nil {
+		target.Content = append(target.Content, stringKey(name), group)
+	} else if current.Kind != yaml.MappingNode {
+		*current = *group
+	} else {
+		for i := 0; i < len(group.Content); i += 2 {
+			key, value := group.Content[i], group.Content[i+1]
+			field := mappingValue(current, key.Value)
+			if field == nil {
+				current.Content = append(current.Content, key, value)
+			} else if field.Tag == "!!null" {
+				*field = *value
 			}
 		}
 	}
