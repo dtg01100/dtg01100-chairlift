@@ -65,13 +65,16 @@ func TestRepeatableControlsReleaseTheirGates(t *testing.T) {
 		"versions.go":     {"pinGate"},
 		"recovery.go":     {"unpinGate"},
 		"agents_page.go":  {"agentPresetGate"},
+		// Free up space is offered again after every run (#488).
+		"maintenance_page.go": {"freeUpSpaceGate"},
 		// Set Up and Launch share one gate, and both are offered again.
 		"troubleshoot.go": {"gooseGate", "askBluefinGate"},
 		// The developer switch and the optional feed setup behind it are
 		// both repeatable: the switch is used again after every toggle, and
 		// the setup gate has to reopen when its worker finishes or a second
-		// enable could never install anything.
-		"features_page.go": {"developerGate", "developerFeedGate"},
+		// enable could never install anything. Update Features is offered
+		// again after every run (#488).
+		"features_page.go": {"developerGate", "developerFeedGate", "updateFeaturesGate"},
 	} {
 		data, err := os.ReadFile(filepath.Join(viewsDir, file))
 		if err != nil {
@@ -156,18 +159,13 @@ func TestLiveryPanelToggleDoesNotMutateInMemoryStateUnderDryRun(t *testing.T) {
 	}
 }
 
-// When the asynchronous enable of the Top Bar or Files mark lands, the
-// "Rotate at Login" switch's sensitivity must be re-evaluated using the
-// same formula applyLiveryState uses on load —
-// pageview.LiveryRotationAvailable(panelAvailable && state.PanelEnabled, id).
-// finishLiveryToggle runs that re-evaluation through
-// setLiverySectionSensitive and syncLiveryRotateSensitive, so the test
-// pins both: the panel branch must combine the caller's `enabled` flag
-// with liveryPanelAvailable (issue #496), and the toggle-completion
-// handler must call the section-sensitive re-evaluation under
-// `if outcome.Commit` so a failed or previewed toggle does not pretend
-// the section became available.
-func TestLiveryPanelToggleRefreshesRotateSensitivityOnCommit(t *testing.T) {
+// A rotate switch's sensitivity follows its section's confirmed on/off state.
+// Selection work captured that state when it started and re-applied it when
+// it published, so a section enabled while the selection ran was locked out of
+// rotation again until the page reloaded (#496). Publishers read the confirmed
+// state at publish time, and the toggle commit records the new state before
+// recomputing its dependents.
+func TestLiveryRotateSensitivityReadsConfirmedSectionState(t *testing.T) {
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller could not locate wiring_test.go")
@@ -177,54 +175,11 @@ func TestLiveryPanelToggleRefreshesRotateSensitivityOnCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := string(data)
-
-	// setLiverySectionSensitive's Panel case must gate every visible-state
-	// advance on liveryPanelAvailable so the toggle-completion handler
-	// computes the same sensitivity the load pass did. Matching the body
-	// in one contiguous block rules out a regression that re-inlines the
-	// unguarded `enabled` argument the issue calls out.
-	sectionSensitivePanel := "case livery.Panel:\n" +
-		"\t\tpanelAvailable := uh.liveryPanelAvailable && enabled\n" +
-		"\t\tif uh.liveryPanelMarkRow != nil {\n" +
-		"\t\t\tuh.liveryPanelMarkRow.SetSensitive(panelAvailable)\n" +
-		"\t\t}\n" +
-		"\t\tif uh.liveryFoundationGrid != nil {\n" +
-		"\t\t\tuh.liveryFoundationGrid.SetSensitive(panelAvailable)\n" +
-		"\t\t}\n" +
-		"\t\tuh.syncLiveryRotateSensitive(s, panelAvailable)"
-	if !strings.Contains(text, sectionSensitivePanel) {
-		t.Errorf("setLiverySectionSensitive(panel) does not gate sensitivity on liveryPanelAvailable (issue #496)")
+	if strings.Contains(text, "uh.syncLiveryRotateSensitive(surface, enabled)") {
+		t.Error("a selection publisher recomputes rotate sensitivity from on/off state captured before its work ran")
 	}
-
-	// finishLiveryToggle must re-evaluate the section's sub-rows under
-	// `if outcome.Commit`, so a successful toggle refreshes the rotate row
-	// on the main thread and a failed or previewed one reverts the master
-	// switch without changing sub-row sensitivity. The two halves are
-	// matched as one block so a regression that drops the re-evaluation
-	// or moves it out from under the gate fails the test.
-	finishToggle := "\t\tif outcome.Commit {\n" +
-		"\t\t\tuh.setLiveryToggleState(s, enabled)\n" +
-		"\t\t\tuh.setLiverySectionSensitive(s, enabled)\n" +
-		"\t\t} else if toggle != nil {"
-	if !strings.Contains(text, finishToggle) {
-		t.Errorf("finishLiveryToggle does not re-evaluate section sensitivity only on commit (issue #496)")
-	}
-
-	// applyLiveryState must keep computing the rotate sensitivity with
-	// the same `panelAvailable && state.PanelEnabled` formula, so the
-	// toggle-completion handler refreshes to the same value the load
-	// pass set. The wiring test pins the source line so the two
-	// computations cannot drift again.
-	liveryPath := filepath.Join(filepath.Dir(filename), "..", "livery_page.go")
-	liverySource, err := os.ReadFile(liveryPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	liveryText := string(liverySource)
-	rotateLine := "\tif uh.liveryPanelRotate != nil {\n" +
-		"\t\tuh.liveryPanelRotate.SetSensitive(\n" +
-		"\t\t\tpageview.LiveryRotationAvailable(panelAvailable && state.PanelEnabled, uh.liveryState.PanelID))"
-	if !strings.Contains(liveryText, rotateLine) {
-		t.Errorf("applyLiveryState rotate sensitivity diverged from the toggle-completion formula")
+	commit := "\t\t\tuh.setLiveryToggleState(s, enabled)\n\t\t\tuh.setLiverySectionSensitive(s, enabled)\n"
+	if !strings.Contains(text, commit) {
+		t.Error("finishLiveryToggle no longer records the committed state before recomputing the section's rotate switch")
 	}
 }
