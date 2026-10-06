@@ -244,8 +244,13 @@ and actions are validated before migration, including retired groups and
 values superseded by current settings. Before decoding, the two surviving
 groups (`bootc_status_group`, `channel_group`) supply omitted/null Updates
 fields; explicit current values take precedence. Information and health groups
-are ignored by runtime decoding. Source files, search precedence, and
-fail-closed handling for invalid inputs remain unchanged.
+are ignored by runtime decoding. Similarly, the retired `maintenance_page`
+groups (`maintenance_brew_group`, `maintenance_flatpak_group`,
+`maintenance_optimization_group`) carried by 26.09-alpha maintainer defaults
+are recognized as known group names, validated alongside their canonical
+siblings, and stripped prior to runtime decoding so existing host files do
+not fail closed. Source files, search precedence, and fail-closed handling
+for invalid inputs remain unchanged.
 
 **Strict loading and diagnostics.** The implementation lives in
 `internal/config`; [the configuration reference](../reference.md) describes

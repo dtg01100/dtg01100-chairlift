@@ -647,7 +647,12 @@ An agent must not break these:
   current page inventory: validate its four historical groups before moving
   `bootc_status_group` and `channel_group` into Updates. Current non-null
   fields win; retired information/health groups have no runtime effect.
-  This must not add a navigable page or relax unknown-name or sudo validation.
+  The retired `maintenance_page` groups (`maintenance_brew_group`,
+  `maintenance_flatpak_group`, `maintenance_optimization_group`) carried by
+  26.09-alpha maintainer defaults are accepted by the same rule, validated
+  for shape/typo/sudo, and stripped prior to runtime decoding so they never
+  re-enable removed behavior. This must not add a navigable page or relax
+  unknown-name or sudo validation.
 - **CI action authority.** Third-party `.github/workflows/` actions use full
   40-character commit SHAs with reviewed version comments. Local `./` actions
   are exempt. Shared `projectbluefin/actions` production interfaces use managed

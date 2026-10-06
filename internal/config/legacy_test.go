@@ -135,3 +135,85 @@ func TestLegacySystemPageInvalidInputStillFailsClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestLegacyMaintenanceGroupsIgnoredWithoutSchemaError(t *testing.T) {
+	data := `maintenance_page:
+  maintenance_brew_group:
+    enabled: true
+  maintenance_flatpak_group:
+    enabled: true
+  maintenance_optimization_group:
+    enabled: true
+  maintenance_freespace_group:
+    enabled: false
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	for _, retired := range legacyMaintenanceGroups {
+		if _, present := cfg.MaintenancePage[retired]; present {
+			t.Errorf("legacy maintenance group %q reached runtime Config", retired)
+		}
+	}
+	if cfg.MaintenancePage["maintenance_freespace_group"].Enabled {
+		t.Fatal("maintenance_freespace_group was not set to false")
+	}
+}
+
+// TestLegacyMaintenanceGroupsUnknownFieldsStillFailClosed mirrors the
+// TestLegacySystemPageInvalidInputStillFailsClosed coverage: an undeclared
+// field under a retired group name must not be silently accepted, and a
+// typo of a retired name must still be rejected so compatibility cannot
+// conceal broken configurations.
+func TestLegacyMaintenanceGroupsUnknownFieldsStillFailClosed(t *testing.T) {
+	for _, data := range []string{
+		"maintenance_page: {maintenance_brew_grup: {enabled: true}}",
+		"maintenance_page: {maintenance_brew_group: {unknown: true}}",
+		"maintenance_page: {maintenance_brew_group: []}",
+		"maintenance_page: {maintenance_flatpak_group: {enabled: []}}",
+		"maintenance_page: {maintenance_optimization_group: {actions: [{title: t, script: /bin/true, sudo: true}]}}",
+		"maintenance_page: {maintenance_brew_group: 42}",
+		"maintenance_page: {maintenance_brew_group: {enabled: false}, maintenance_brew_group: {enabled: true}}",
+		"maintenance_page: {maintenance_brew_group: &cycle {<<: *cycle}}",
+	} {
+		t.Run(data, func(t *testing.T) {
+			path := writeConfigFile(t, data)
+			withConfigPaths(t, []string{path, "must-not-read.yml"})
+			cfg, err := Load()
+			if err == nil || err.Path != path {
+				t.Fatalf("error = %v, want authoritative failure", err)
+			}
+			assertAllKnownGroupsDisabled(t, cfg)
+		})
+	}
+}
+
+// TestLegacyMaintenanceGroupsOnlyAreStripped ensures retired groups are
+// removed but canonical neighbors (e.g. maintenance_freespace_group) keep
+// their enabled state and order.
+func TestLegacyMaintenanceGroupsOnlyAreStripped(t *testing.T) {
+	data := `maintenance_page:
+  maintenance_cleanup_group:
+    enabled: true
+  maintenance_brew_group:
+    enabled: true
+  maintenance_freespace_group:
+    enabled: true
+`
+	cfg, err := loadFromPath(writeConfigFile(t, data))
+	if err != nil {
+		t.Fatalf("loadFromPath failed: %v", err)
+	}
+	if !cfg.MaintenancePage["maintenance_cleanup_group"].Enabled {
+		t.Fatal("maintenance_cleanup_group should remain enabled")
+	}
+	if !cfg.MaintenancePage["maintenance_freespace_group"].Enabled {
+		t.Fatal("maintenance_freespace_group should remain enabled")
+	}
+	for _, retired := range legacyMaintenanceGroups {
+		if _, present := cfg.MaintenancePage[retired]; present {
+			t.Errorf("legacy maintenance group %q reached runtime Config", retired)
+		}
+	}
+}

@@ -81,6 +81,17 @@ compatibility rule for `system_page`, not general acceptance of obsolete keys
 elsewhere in an old file. No file is rewritten: administrators can move the
 two surviving groups to `updates_page` and remove `system_page` when convenient.
 
+## Legacy Maintenance page groups compatibility
+
+Older files (such as maintainer defaults shipped with 26.09-alpha Bluefin
+images) may specify `maintenance_brew_group`, `maintenance_flatpak_group`, or
+`maintenance_optimization_group`. These retired groups are accepted as known
+names, undergo the same field, type, and `sudo` validation as the current
+groups, and are stripped from the configuration prior to runtime decoding so
+they have no runtime effect and do not trigger the fail-closed schema error
+that would otherwise disable every feature group. Routine cleanup is handled
+by `maintenance_freespace_group` and `maintenance_cleanup_group`.
+
 ## Available Pages and Groups
 
 ### Agents Page (`agents_page`)
