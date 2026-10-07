@@ -830,7 +830,11 @@ a missing platform extension with its own default and keeps an `enabled`
 value already present. No provider, model, or key is written: llmman hands
 Goose its provider through the environment. `hints.md` becomes the profile's
 `.goosehints`. Knowledge searches go online, so no copy claims a session's
-questions stay on this computer.
+questions stay on this computer. The hint explicitly names the `linux-tools`
+tools (`get_system_information`, `get_disk_usage`, `get_cpu_information`,
+…) so a small local model — the default Qwen3-8B preset — reaches for them
+instead of answering from training data (issue #523); it also forbids
+inventing system facts the tools would have returned.
 
 `troubleshoot.Setup` installs what is missing, with `Needed` per step so a
 half-done install resumes: `ublue-os/tap` (only when a package is missing),

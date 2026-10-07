@@ -311,6 +311,35 @@ func TestProfileWriteStaysInsideTheProfile(t *testing.T) {
 	}
 }
 
+// The session instructions have to push small local models (Qwen3-8B by
+// default) to reach for the read-only linux-tools tools instead of answering
+// from training. The hint names the most common queries that get hallucinated
+// (hostname, kernel) with the matching tool name, and forbids inventing
+// system facts that the tool would have returned. Issue #523.
+func TestHintsDirectTheModelToCallLinuxTools(t *testing.T) {
+	hint := Hints()
+	mustContain := []string{
+		// Imperative language: a hint that says "look before you answer"
+		// is easy for a small model to skim over.
+		"You MUST inspect",
+		"get_system_information",
+		"get_disk_usage",
+		// The failure mode in the issue: the model invents the answer
+		// from training data instead of calling the tool.
+		"Do not invent",
+		"Do not answer",
+		// Tool names the model could forget exist; the hint has to call
+		// them out by name so they are advertised in the prompt.
+		"linux-tools",
+		"search_knowledge",
+	}
+	for _, fragment := range mustContain {
+		if !strings.Contains(hint, fragment) {
+			t.Errorf("session hint does not contain %q", fragment)
+		}
+	}
+}
+
 // Moving XDG_CONFIG_HOME isolates Goose's Electron profile but would also
 // hide the user's default browser and dconf from the session; both are
 // linked back, and a name already in the profile is never replaced.
