@@ -122,15 +122,14 @@ func (uh *UserHome) loadUntrustedTaps() {
 		log.Printf("untrusted tap check failed: %v", err)
 	}
 	sgtk.RunOnMainThread(func() {
-		for _, expander := range uh.brewTrustRows {
-			uh.brewTrustGroup.Remove(&expander.Widget)
+		for _, entry := range uh.brewTrustTaps {
+			uh.brewTrustGroup.Remove(&entry.expander.Widget)
 		}
 		if uh.brewTrustError != nil {
 			uh.brewTrustGroup.Remove(&uh.brewTrustError.Widget)
 			uh.brewTrustError = nil
 		}
-		uh.brewTrustRows = make(map[string]*adw.ExpanderRow)
-		uh.brewTrustPackages = make(map[string]map[trustPackageKey]*adw.ActionRow)
+		uh.brewTrustTaps = make(map[string]*untrustedTapEntry)
 		uh.trustButtons.clear()
 		if err != nil {
 			// The failure stays a top-level row of the group, not a child
@@ -155,11 +154,14 @@ func (uh *UserHome) loadUntrustedTaps() {
 			uh.brewTrustError = row
 		}
 		for _, tap := range taps {
-			t := tap
-			presentation := pageview.UntrustedTap(t.Name, t.Formulae, t.Casks)
-			expander := adw.NewExpanderRow()
-			expander.SetTitle(presentation.Title)
-			expander.SetSubtitle(presentation.Subtitle)
+			presentation := pageview.UntrustedTap(tap.Name, tap.Formulae, tap.Casks)
+			entry := &untrustedTapEntry{
+				tap:      tap,
+				expander: adw.NewExpanderRow(),
+				packages: make(map[trustPackageKey]*adw.ActionRow),
+			}
+			entry.expander.SetTitle(presentation.Title)
+			entry.expander.SetSubtitle(presentation.Subtitle)
 
 			// "Trust Tap" suffix: the broad path. Trusts every installed
 			// package from this tap at once, and is the only option when
@@ -171,9 +173,9 @@ func (uh *UserHome) loadUntrustedTaps() {
 			trustBtn.SetValign(gtk.AlignCenterValue)
 			trustBtn.AddCssClass("suggested-action")
 			uh.trustButtons.connect(trustBtn, func(gtk.Button) {
-				uh.confirmTrustTap(t, trustBtn)
+				uh.confirmTrustTap(entry, trustBtn)
 			})
-			expander.AddSuffix(&trustBtn.Widget)
+			entry.expander.AddSuffix(&trustBtn.Widget)
 
 			// One row per installed package, with its own "Trust" button.
 			// That is the per-program path issue #537 asks for: a tap with
@@ -182,23 +184,21 @@ func (uh *UserHome) loadUntrustedTaps() {
 			// tap-wide shortcut for trusting every installed program from
 			// the tap. Rows are keyed by kind as well as name: a tap may
 			// ship a formula and a cask under the same qualified name.
-			packages := make(map[trustPackageKey]*adw.ActionRow)
-			for _, formula := range t.Formulae {
-				pkgRow := uh.buildUntrustedPackageRow(formula, homebrew.Formula, t.Name)
-				expander.AddRow(&pkgRow.Widget)
-				packages[trustPackageKey{homebrew.Formula, formula}] = pkgRow
+			for _, formula := range tap.Formulae {
+				pkgRow := uh.buildUntrustedPackageRow(formula, homebrew.Formula, tap.Name)
+				entry.expander.AddRow(&pkgRow.Widget)
+				entry.packages[trustPackageKey{homebrew.Formula, formula}] = pkgRow
 			}
-			for _, cask := range t.Casks {
-				pkgRow := uh.buildUntrustedPackageRow(cask, homebrew.Cask, t.Name)
-				expander.AddRow(&pkgRow.Widget)
-				packages[trustPackageKey{homebrew.Cask, cask}] = pkgRow
+			for _, cask := range tap.Casks {
+				pkgRow := uh.buildUntrustedPackageRow(cask, homebrew.Cask, tap.Name)
+				entry.expander.AddRow(&pkgRow.Widget)
+				entry.packages[trustPackageKey{homebrew.Cask, cask}] = pkgRow
 			}
 
-			uh.brewTrustGroup.Add(&expander.Widget)
-			uh.brewTrustRows[t.Name] = expander
-			uh.brewTrustPackages[t.Name] = packages
+			uh.brewTrustGroup.Add(&entry.expander.Widget)
+			uh.brewTrustTaps[tap.Name] = entry
 		}
-		uh.brewTrustGroup.SetVisible(len(uh.brewTrustRows) > 0 || uh.brewTrustError != nil)
+		uh.brewTrustGroup.SetVisible(len(uh.brewTrustTaps) > 0 || uh.brewTrustError != nil)
 	})
 }
 
@@ -208,6 +208,16 @@ func (uh *UserHome) loadUntrustedTaps() {
 type trustPackageKey struct {
 	kind homebrew.PackageKind
 	name string
+}
+
+// untrustedTapEntry is one source in the Manage source trust group. tap holds
+// the packages still untrusted: a per-package trust removes its package
+// there as well as its row, so the expander's count and the Trust Tap
+// dialog always describe what is left rather than what was first loaded.
+type untrustedTapEntry struct {
+	tap      homebrew.UntrustedTap
+	expander *adw.ExpanderRow
+	packages map[trustPackageKey]*adw.ActionRow
 }
 
 // buildUntrustedPackageRow returns one ActionRow for an installed package
@@ -231,13 +241,12 @@ func (uh *UserHome) buildUntrustedPackageRow(qualifiedName string, kind homebrew
 
 // confirmTrustTap shows a confirmation dialog before trusting a source. The
 // consequence is third-party code running on this machine, which is exactly
-// the kind of thing a person must agree to rather than discover.
-func (uh *UserHome) confirmTrustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
-	installed := len(tap.Formulae) + len(tap.Casks)
-	dialog := adw.NewAlertDialog(
-		fmt.Sprintf("Trust software from %s?", tap.Name),
-		fmt.Sprintf("This will trust all %d installed programs from %s at once, so they can install and update. Only trust sources you recognize.", installed, tap.Name),
-	)
+// the kind of thing a person must agree to rather than discover. It reads
+// the entry's remaining packages when shown and again when confirmed, so a
+// program trusted on its own in between is neither counted nor re-trusted.
+func (uh *UserHome) confirmTrustTap(entry *untrustedTapEntry, button *gtk.Button) {
+	title, body := pageview.TapTrustConfirmation(entry.tap.Name, entry.tap.Count())
+	dialog := adw.NewAlertDialog(title, body)
 	dialog.AddResponse("cancel", "Cancel")
 	dialog.AddResponse("trust", "Trust Tap")
 	dialog.SetResponseAppearance("trust", adw.ResponseSuggestedValue)
@@ -248,7 +257,7 @@ func (uh *UserHome) confirmTrustTap(tap homebrew.UntrustedTap, button *gtk.Butto
 		}
 		button.SetSensitive(false)
 		button.SetLabel("Trusting Tap…")
-		go uh.trustTap(tap, button)
+		go uh.trustTap(entry.tap, button)
 	})
 	dialog.Present(&uh.updatesPrefsPage.Widget)
 }
@@ -272,13 +281,12 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 
 		decision := actionmsg.TapTrust(dryrun.Enabled(), tap.Name)
 		if decision.MutateUI {
-			if row, ok := uh.brewTrustRows[tap.Name]; ok {
-				uh.brewTrustGroup.Remove(&row.Widget)
-				delete(uh.brewTrustRows, tap.Name)
-				delete(uh.brewTrustPackages, tap.Name)
+			if entry, ok := uh.brewTrustTaps[tap.Name]; ok {
+				uh.brewTrustGroup.Remove(&entry.expander.Widget)
+				delete(uh.brewTrustTaps, tap.Name)
 				uh.trustButtons.forget(button)
 			}
-			if len(uh.brewTrustRows) == 0 && uh.brewTrustError == nil {
+			if len(uh.brewTrustTaps) == 0 && uh.brewTrustError == nil {
 				uh.brewTrustGroup.SetVisible(false)
 			}
 			uh.toastAdder.ShowToast(decision.Toast)
@@ -352,32 +360,30 @@ func (uh *UserHome) trustPackage(qualifiedName string, kind homebrew.PackageKind
 		decision := actionmsg.PackageTrust(dryrun.Enabled(), qualifiedName)
 		if decision.MutateUI {
 			key := trustPackageKey{kind, qualifiedName}
-			if packages, ok := uh.brewTrustPackages[tapName]; ok {
-				if pkgRow, ok := packages[key]; ok {
-					// Remove from the parent expander (which is the
-					// tap's row, not the group) and from the per-tap map.
-					if expander, ok := uh.brewTrustRows[tapName]; ok {
-						expander.Remove(&pkgRow.Widget)
-					}
-					delete(packages, key)
+			if entry, ok := uh.brewTrustTaps[tapName]; ok {
+				if pkgRow, ok := entry.packages[key]; ok {
+					// The row lives in the tap's expander, not the group.
+					entry.expander.Remove(&pkgRow.Widget)
+					delete(entry.packages, key)
 					uh.trustButtons.forget(button)
 				}
-				if len(packages) == 0 {
-					// The tap has no remaining untrusted packages; drop
-					// the whole tap and refresh the outdated inventory so
-					// the just-trusted package shows up as upgradable.
-					if expander, ok := uh.brewTrustRows[tapName]; ok {
-						uh.brewTrustGroup.Remove(&expander.Widget)
-					}
-					delete(uh.brewTrustRows, tapName)
-					delete(uh.brewTrustPackages, tapName)
+				entry.tap = entry.tap.Without(kind, qualifiedName)
+				if entry.tap.Count() == 0 {
+					// Nothing from the tap is left untrusted; drop the
+					// whole tap.
+					uh.brewTrustGroup.Remove(&entry.expander.Widget)
+					delete(uh.brewTrustTaps, tapName)
+				} else {
+					entry.expander.SetSubtitle(pageview.UntrustedTap(tapName, entry.tap.Formulae, entry.tap.Casks).Subtitle)
 				}
 			}
-			if len(uh.brewTrustRows) == 0 && uh.brewTrustError == nil {
+			if len(uh.brewTrustTaps) == 0 && uh.brewTrustError == nil {
 				uh.brewTrustGroup.SetVisible(false)
 			}
 			uh.toastAdder.ShowToast(decision.Toast)
 
+			// Refresh the inventory so the just-trusted package shows up
+			// as upgradable.
 			if uh.updateShell != nil {
 				uh.updateShell.StartCheck()
 			}

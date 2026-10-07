@@ -72,6 +72,7 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 			required: []string{
 				"pageview.UntrustedTap(",
 				"pageview.UntrustedTapPackage(",
+				"pageview.TapTrustConfirmation(",
 				"pageview.BootcUpdateSubtitle(",
 				"pageview.BootcStageResultSubtitle(",
 				// Moved here with the release channel and the graphics
@@ -110,6 +111,8 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 				`"Checking for updates…"`,
 				`"The update could not be downloaded. Open Details to see what happened."`,
 				"ShortDigest(",
+				// The tap-trust dialog's count is pluralized in pageview.
+				"installed programs from %s at once",
 			},
 		},
 		{
@@ -591,5 +594,27 @@ func TestUntrustedSourceRowsStayVisibleAndDistinct(t *testing.T) {
 	trust := bodies["trustPackage"]
 	if !strings.Contains(trust, "trustPackageKey{kind, qualifiedName}") || strings.Contains(trust, "packages[qualifiedName]") {
 		t.Error("trustPackage must find the trusted row by kind and name, not name alone")
+	}
+
+	// After a per-package trust the tap's remaining packages, not its first
+	// load, drive the expander's count, the Trust Tap dialog, and a later
+	// tap-wide trust; otherwise the dialog miscounts and the handled
+	// package is trusted a second time.
+	for _, required := range []string{
+		"entry.tap = entry.tap.Without(kind, qualifiedName)",
+		"entry.expander.SetSubtitle(pageview.UntrustedTap(tapName, entry.tap.Formulae, entry.tap.Casks).Subtitle)",
+	} {
+		if !strings.Contains(trust, required) {
+			t.Errorf("trustPackage: missing %q", required)
+		}
+	}
+	confirm := bodies["confirmTrustTap"]
+	for _, required := range []string{
+		"pageview.TapTrustConfirmation(entry.tap.Name, entry.tap.Count())",
+		"go uh.trustTap(entry.tap, button)",
+	} {
+		if !strings.Contains(confirm, required) {
+			t.Errorf("confirmTrustTap: missing %q", required)
+		}
 	}
 }

@@ -118,6 +118,44 @@ func TestUpdateRowsCoverEveryPresentation(t *testing.T) {
 	}
 }
 
+func TestTapTrustConfirmationMatchesTheRemainingCount(t *testing.T) {
+	tests := []struct {
+		name  string
+		count int
+		body  string
+	}{
+		{
+			name:  "one program",
+			count: 1,
+			body:  "This will trust the 1 installed program from vendor/tap, so it can install and update. Only trust sources you recognize.",
+		},
+		{
+			name:  "several programs",
+			count: 3,
+			body:  "This will trust all 3 installed programs from vendor/tap at once, so they can install and update. Only trust sources you recognize.",
+		},
+		{
+			name:  "no count",
+			count: 0,
+			body:  "This will trust software from vendor/tap, so it can install and update. Only trust sources you recognize.",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			title, body := TapTrustConfirmation("vendor/tap", tt.count)
+			if title != "Trust software from vendor/tap?" {
+				t.Errorf("title = %q", title)
+			}
+			if body != tt.body {
+				t.Errorf("body = %q, want %q", body, tt.body)
+			}
+			if strings.Contains(body, "all 1 ") || strings.Contains(body, "1 installed programs") {
+				t.Errorf("body %q pluralizes a single program", body)
+			}
+		})
+	}
+}
+
 func TestBootcUpdateSubtitlesCoverEveryState(t *testing.T) {
 	tests := []struct {
 		name    string

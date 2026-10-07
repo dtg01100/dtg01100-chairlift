@@ -305,6 +305,7 @@ Feature: Updates
     Then the "vendor/tap" row says "Updates are paused for 1 program"
     When I click the "Trust Tap" button in the "vendor/tap" row
     Then a dialog titled "Trust software from vendor/tap?" is shown
+    And the dialog says "This will trust the 1 installed program from vendor/tap"
     When I choose "Trust Tap" in the dialog
     Then the application log contains "[DRY-RUN] Would execute: brew trust --formula vendor/tap/example"
     And the "Trust Tap" button in the "vendor/tap" row is sensitive

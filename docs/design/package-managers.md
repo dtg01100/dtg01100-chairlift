@@ -296,7 +296,10 @@ inside a collapsed expander. Trust is per-user, never pkexec.
 before running it. Failed discovery retains a visible Retry action. Live
 success removes only the trusted source row (and, for per-package trust, the
 trusted package's row inside the parent expander) and starts the coordinator's
-shared check; preview restores Trust without removing a row. The
+shared check. A per-package success also drops the package from the tap's
+remaining `UntrustedTap` (`Without`), so the expander's count, the
+**Trust Tap** dialog (`pageview.TapTrustConfirmation`), and a later tap-wide
+trust cover only what is left. Preview restores Trust without removing a row. The
 configuration-gated **Manage source trust** group may not exist, so
 `trustmsg.UpgradeMessage(name, trustGroupAvailable)` must not direct the user
 to a hidden control. Bundle failures use `trustmsg.BundleMessage` instead.
