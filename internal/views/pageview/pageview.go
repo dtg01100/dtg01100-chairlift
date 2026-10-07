@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/projectbluefin/chairlift/internal/gpu"
+	"github.com/projectbluefin/chairlift/internal/homebrew"
 	"github.com/projectbluefin/chairlift/internal/pkexec"
 )
 
@@ -15,20 +16,6 @@ type Row struct {
 	Title    string
 	Subtitle string
 }
-
-// PackageKind is whether a Homebrew package is a formula or a cask.
-// pageview mirrors internal/homebrew.PackageKind (rather than importing it)
-// because pageview is consumed by every other view package and pulling the
-// whole homebrew tree in would cycle; the constants match and tests assert
-// both halves in the same change.
-type PackageKind int
-
-const (
-	// FormulaPackageKind is a Cellar-resident formula.
-	FormulaPackageKind PackageKind = iota
-	// CaskPackageKind is a Caskroom-resident cask.
-	CaskPackageKind
-)
 
 // HelpResource is one configured link on the Help page.
 type HelpResource struct {
@@ -105,9 +92,9 @@ const BootcStageRunningSubtitle = "Looking for a newer version and downloading i
 // tap trust list it joins. The noun is the user's word, not the system word:
 // formulae are still "programs" here even though Homebrew distinguishes them
 // internally.
-func UntrustedTapPackage(qualifiedName string, kind PackageKind) Row {
+func UntrustedTapPackage(qualifiedName string, kind homebrew.PackageKind) Row {
 	noun := "program"
-	if kind == CaskPackageKind {
+	if kind == homebrew.Cask {
 		noun = "app"
 	}
 	return Row{

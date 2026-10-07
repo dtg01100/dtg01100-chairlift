@@ -75,7 +75,8 @@ type UserHome struct {
 	appInstallProgress installProgress
 	brewTrustGroup     *adw.PreferencesGroup
 	brewTrustRows      map[string]*adw.ExpanderRow
-	brewTrustPackages  map[string]map[string]*adw.ActionRow // tap name -> qualified package name -> row
+	brewTrustPackages  map[string]map[trustPackageKey]*adw.ActionRow // tap name -> package -> row
+	brewTrustError     *adw.ActionRow                                // failed discovery row, nil otherwise
 	// Apps collections share one install gate per collection.
 	bundleInstalls map[string]*bundleInstall
 	bundleButtons  buttonRoute

@@ -538,3 +538,58 @@ func TestRecoveryEntrySubtitleFollowsTheDetail(t *testing.T) {
 		t.Error("buildRecoveryPage builds the published-versions calendar withdrawn by #522")
 	}
 }
+
+// The Manage source trust group (#537) had two defects at the widget layer.
+// A failed source check added its "Could not check software sources" row to
+// the group and then again to an untitled, collapsed expander, so a sighted
+// user saw a blank row and not the message or its Retry button; with that
+// shape, make e2e's walkthrough (whose host check fails) captured every page
+// as the same frame. And per-package rows were keyed by
+// qualified name alone, so a formula and a cask sharing a name in one tap
+// collided: trusting the formula removed the cask's row and stranded the
+// formula's on "Trusting\xe2\x80\xa6". The error row is a direct child of the group,
+// and both the build and the removal key packages by kind and name.
+func TestUntrustedSourceRowsStayVisibleAndDistinct(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller could not locate wiring_test.go")
+	}
+	path := filepath.Join(filepath.Dir(filename), "..", "updates_page.go")
+	source, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	set := token.NewFileSet()
+	parsed, err := parser.ParseFile(set, path, source, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bodies := map[string]string{}
+	for _, declaration := range parsed.Decls {
+		if fn, ok := declaration.(*ast.FuncDecl); ok && fn.Body != nil {
+			bodies[fn.Name.Name] = string(source[set.Position(fn.Body.Pos()).Offset:set.Position(fn.Body.End()).Offset])
+		}
+	}
+
+	load := bodies["loadUntrustedTaps"]
+	for _, required := range []string{
+		"uh.brewTrustGroup.Add(&row.Widget)",
+		"uh.brewTrustError = row",
+		"packages[trustPackageKey{homebrew.Formula, formula}]",
+		"packages[trustPackageKey{homebrew.Cask, cask}]",
+	} {
+		if !strings.Contains(load, required) {
+			t.Errorf("loadUntrustedTaps: missing %q", required)
+		}
+	}
+	for _, banned := range []string{"AddRow(&row.Widget)", "packages[formula]", "packages[cask]"} {
+		if strings.Contains(load, banned) {
+			t.Errorf("loadUntrustedTaps: %q hides the error row or keys packages by name alone", banned)
+		}
+	}
+
+	trust := bodies["trustPackage"]
+	if !strings.Contains(trust, "trustPackageKey{kind, qualifiedName}") || strings.Contains(trust, "packages[qualifiedName]") {
+		t.Error("trustPackage must find the trusted row by kind and name, not name alone")
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/projectbluefin/chairlift/internal/homebrew"
 )
 
 func TestApplicationRowsCoverEveryPresentation(t *testing.T) {
@@ -75,13 +77,13 @@ func TestUpdateRowsCoverEveryPresentation(t *testing.T) {
 	packageTests := []struct {
 		name          string
 		qualifiedName string
-		kind          PackageKind
+		kind          homebrew.PackageKind
 		want          Row
 	}{
 		{
 			name:          "formula",
 			qualifiedName: "vendor/tap/demo",
-			kind:          FormulaPackageKind,
+			kind:          homebrew.Formula,
 			want: Row{
 				Title:    "demo",
 				Subtitle: "Updates are paused for this program — Trust to update",
@@ -90,7 +92,7 @@ func TestUpdateRowsCoverEveryPresentation(t *testing.T) {
 		{
 			name:          "cask",
 			qualifiedName: "vendor/tap/demo",
-			kind:          CaskPackageKind,
+			kind:          homebrew.Cask,
 			want: Row{
 				Title:    "demo",
 				Subtitle: "Updates are paused for this app — Trust to update",
@@ -99,7 +101,7 @@ func TestUpdateRowsCoverEveryPresentation(t *testing.T) {
 		{
 			name:          "unqualified name passes through",
 			qualifiedName: "plain",
-			kind:          FormulaPackageKind,
+			kind:          homebrew.Formula,
 			want: Row{
 				Title:    "plain",
 				Subtitle: "Updates are paused for this program — Trust to update",

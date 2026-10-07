@@ -287,8 +287,11 @@ qualified installed package names. `TrustFormula`/`TrustCask` are the
 per-package path that issue #537 asks for: each installed package inside a
 tap's row carries a Trust button, and Homebrew 6's `brew trust --formula <name>`
 adds only that one package to `~/.homebrew/trust.json`. The tap-level
-**Trust Tap** button stays for the case where the user wants to trust
-everything at once. Trust is per-user, never pkexec.
+**Trust Tap** button runs `TrustPackages`, trusting every *installed* package
+from the tap at once; it does not run `brew trust --tap`. Rows are tracked by
+package kind as well as name, because a tap may ship a formula and a cask with
+the same name. A failed discovery row is a direct child of the group, never
+inside a collapsed expander. Trust is per-user, never pkexec.
 [`updates_page.go`](../../internal/views/updates_page.go) confirms source trust
 before running it. Failed discovery retains a visible Retry action. Live
 success removes only the trusted source row (and, for per-package trust, the
