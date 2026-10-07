@@ -103,9 +103,9 @@ Feature: Updates
   @stub.updates-flatpak-current @stub.updates-brew-trust-check-fails
   Scenario: A failed source-trust check is not hidden as if every source were trusted
     Given ChairLift is running
-    Then I see "Unverified sources"
-    And the "Couldn't check for paused updates" row says "Check your internet connection and try again."
-    And the "Retry" button in the "Couldn't check for paused updates" row is sensitive
+    Then I see "Manage source trust"
+    And the "Could not check software sources" row says "Broken pipe"
+    And the "Retry" button in the "Could not check software sources" row is sensitive
     And the application log contains "untrusted tap check failed"
 
   @stub.updates-flatpak-current @stub.updates-brew-current

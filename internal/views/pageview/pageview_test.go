@@ -72,6 +72,48 @@ func TestUpdateRowsCoverEveryPresentation(t *testing.T) {
 		})
 	}
 
+	packageTests := []struct {
+		name          string
+		qualifiedName string
+		kind          PackageKind
+		want          Row
+	}{
+		{
+			name:          "formula",
+			qualifiedName: "vendor/tap/demo",
+			kind:          FormulaPackageKind,
+			want: Row{
+				Title:    "demo",
+				Subtitle: "Updates are paused for this program — Trust to update",
+			},
+		},
+		{
+			name:          "cask",
+			qualifiedName: "vendor/tap/demo",
+			kind:          CaskPackageKind,
+			want: Row{
+				Title:    "demo",
+				Subtitle: "Updates are paused for this app — Trust to update",
+			},
+		},
+		{
+			name:          "unqualified name passes through",
+			qualifiedName: "plain",
+			kind:          FormulaPackageKind,
+			want: Row{
+				Title:    "plain",
+				Subtitle: "Updates are paused for this program — Trust to update",
+			},
+		},
+	}
+	for _, tt := range packageTests {
+		t.Run("untrusted tap package/"+tt.name, func(t *testing.T) {
+			got := UntrustedTapPackage(tt.qualifiedName, tt.kind)
+			if got != tt.want {
+				t.Fatalf("UntrustedTapPackage(%q, %v) = %#v, want %#v", tt.qualifiedName, tt.kind, got, tt.want)
+			}
+		})
+	}
 }
 
 func TestBootcUpdateSubtitlesCoverEveryState(t *testing.T) {

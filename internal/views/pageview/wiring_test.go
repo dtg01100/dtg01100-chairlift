@@ -71,6 +71,7 @@ func TestPageBuildersUsePurePresentations(t *testing.T) {
 			file: "updates_page.go",
 			required: []string{
 				"pageview.UntrustedTap(",
+				"pageview.UntrustedTapPackage(",
 				"pageview.BootcUpdateSubtitle(",
 				"pageview.BootcStageResultSubtitle(",
 				// Moved here with the release channel and the graphics
