@@ -239,9 +239,6 @@ type FeatureToggleDecision struct {
 	Confirm bool
 	// Toast is the completion message to show immediately.
 	Toast string
-	// Warn is true when the action succeeded only in part, so the caller
-	// must keep the toast visible as a warning rather than a passing note.
-	Warn bool
 }
 
 // FeatureToggle decides whether toggling a system feature's switch should
@@ -361,10 +358,13 @@ func ChannelSwitch(dryRun bool, toTesting bool) FeatureToggleDecision {
 //
 // skipped lists the developer groups the helper reported it could not
 // change. An enable that skipped some is a partial grant: it still confirms
-// (the account did join the others) but warns, naming each group not
+// (the account did join the others) and its toast names each group not
 // granted, so the user does not assume access to Docker or Incus they lack
-// (#495). A disable that skips a group the account was never in has nothing
-// to warn about.
+// (#495). The toast is an ordinary one, not a persistent error: on images
+// that ship neither group (Dakota) every enable skips them, and a persistent
+// "enabled" banner outlived a later disable. An ordinary toast's title is a
+// single ellipsized line, so the note stays short enough that the group
+// names are not cut off.
 func DeveloperMode(dryRun bool, enable bool, skipped []string) FeatureToggleDecision {
 	verb := "disabled"
 	if enable {
@@ -379,22 +379,13 @@ func DeveloperMode(dryRun bool, enable bool, skipped []string) FeatureToggleDeci
 	if enable && len(skipped) > 0 {
 		return FeatureToggleDecision{
 			Confirm: true,
-			Toast: fmt.Sprintf("Developer mode enabled, but your account was not added to %s; this system may not provide %s. Log out and back in to apply the rest.",
-				strings.Join(skipped, ", "), pluralIt(len(skipped))),
-			Warn: true,
+			Toast:   fmt.Sprintf("Developer mode enabled (no %s). Log out and back in.", strings.Join(skipped, ", ")),
 		}
 	}
 	return FeatureToggleDecision{
 		Confirm: true,
 		Toast:   fmt.Sprintf("Developer mode %s. Log out and back in to apply.", verb),
 	}
-}
-
-func pluralIt(n int) string {
-	if n == 1 {
-		return "it"
-	}
-	return "them"
 }
 
 // GamingMode decides whether the Gaming Mode switch should confirm its new
