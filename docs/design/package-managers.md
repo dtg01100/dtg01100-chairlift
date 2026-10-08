@@ -272,16 +272,19 @@ to a hidden control. Bundle failures use `trustmsg.BundleMessage` instead.
 Flatpak retains installation scope and ref kind. `KindApplication` and
 `KindRuntime` select mutually exclusive `--app`/`--runtime` listings; the kind
 is stamped from the query, not inferred from optional parsed columns.
-`Application` carries name, ID, version, installation and kind.
+`Application` carries name, ID, version, branch, installation and kind.
 `UpdateInfo` carries application ID, display name, new version and installation.
 
 | API | Scope / command |
 | --- | --- |
-| `ListUserApplications()` / `ListSystemApplications()` | `flatpak list --user/--system --app --columns=name,application,version` |
+| `ListUserApplications()` / `ListSystemApplications()` | `flatpak list --user/--system --app --columns=name,application,version,branch` |
 | `ListUserRuntimes()` / `ListSystemRuntimes()` | Same query with `--runtime` |
 | `ListUpdates(ctx, user)` | `remotes --columns=name,options`, then `remote-ls --updates --app --columns=name,application,version <remote>` per enabled remote, in the selected scope |
 | `Install(appID, user)` / `InstallFromRemote(appID, remote, user)` | `install -y` in explicit scope, optionally naming a remote |
 | `Uninstall(appID, user)` | `uninstall -y` in explicit scope |
+| `AppRuntime(appID)` | `info --show-runtime <appID>` in any installation |
+| `RemoteAppRuntime(remote, appID, user)` | `remote-info --user/--system --app --show-runtime <remote> <appID>` |
+| `RefBranch(ref)` | Pure: last segment of `ID/ARCH/BRANCH` or `KIND/ID/ARCH/BRANCH` |
 | `Update(ctx, appID, user)` | `update -y` in explicit scope; empty ID updates that scope |
 | `UninstallUnused()` | Independently `uninstall --unused -y --user` and `--system`; errors joined |
 | `RemoveAllUser()` | `uninstall --user --all -y`; Powerwash step, not routine cleanup |
@@ -637,12 +640,24 @@ account's access. View mutations share `developerGate` and render post-action
 observations instead of assuming the requested state.
 
 [`internal/gaming`](../../internal/gaming/gaming.go) manages explicitly
-selected refs from `Components()`, in user scope only. Its inventory queries
-application/runtime kinds in both scopes; system copies are neither shadowed
-nor removed. Invalid selections fail before mutation, duplicates run once,
-and per-item failures preserve partial outcomes. The Features view serializes
-action/refresh with `gamingGate`; failed refreshes preserve last known state.
-Neither gaming nor per-user Homebrew trust adds privilege.
+selected refs from `Components()`. Enable installs missing refs in the
+**system** scope (`Install(id, false)`, #503): Bluefin-family images
+configure Flathub only as a system remote, and their policy is system-wide
+Flatpaks. The `flatpak` CLI authorizes that through Flatpak's own PolicyKit
+(`org.freedesktop.Flatpak.app-install`/`runtime-install`), not ChairLift's
+`pkexec` boundary. Its inventory queries application/runtime kinds in both
+scopes, so a per-user copy from an earlier release counts as installed and is
+not duplicated. Disable removes each selected ref from exactly the scopes it
+is observed in (`Uninstall(id, true)` for a user copy, `Uninstall(id, false)`
+for a system copy); unselected refs are never touched, and a ref with a copy
+left is a failure. A system copy the image declares it ships (Flatpak
+`preinstall.d` or Bluefin's `system-flatpaks.Brewfile`, read by
+`imageShipped`) is left in place and returned as kept rather than removed.
+Invalid selections fail before mutation, duplicates run
+once, and per-item failures preserve partial outcomes. The Features view
+serializes action/refresh with `gamingGate`; failed refreshes preserve last
+known state. Neither gaming nor per-user Homebrew trust adds a ChairLift
+privilege route.
 
 ## Agent Mode (`internal/aistack`)
 
