@@ -555,7 +555,7 @@ reference. Missing installed pin support keeps that action insensitive with
 an explanation; the currently booted day reads Pinned. Shared `buttonRoute`
 and `dialogRoute` callbacks survive repeated list refreshes.
 
-[`recovery.go`](../../internal/views/recovery.go) offers **Return to stream**
+[`recovery.go`](../../internal/views/recovery.go) offers **Go back to regular updates**
 only when the descriptor's running tag parses as a dated build. Its confirmed
 action calls `ublue.Unpin(ctx)` and requires installed unpin support. Both
 controls reset their action gates after completion, refresh rollback status
@@ -622,13 +622,20 @@ inventory; architecture support is checked per tool.
 
 `dx_group.wsl_backend` defaults to **nsl**, with **Lima** as an administrator
 option and an in-session backend chooser. The first observation retains an
-existing Lima Ubuntu machine when no nsl machine exists; it does not persist
-the chooser selection or silently migrate data. nsl requires Linux amd64;
+existing Lima Ubuntu machine when no ChairLift nsl machine exists; it does not
+persist the chooser selection or silently migrate data. nsl requires Linux amd64;
 Lima supports Linux amd64 and arm64. Both require actual invoking-session
 `/dev/kvm` access; the fixed `kvm-enable` grant requires a new login before
-setup continues. nsl installs the `frostyard/tap/nsl` cask, runs `nsl doctor`,
-creates a Debian 13 machine when absent, starts it and proves shell readiness
-with `nsl run true`. Disable uses `nsl shutdown` and keeps data. Lima installs
+setup continues. nsl installs the `frostyard/tap/nsl` cask and runs `nsl doctor`.
+WSL Mode's nsl machine is `ubuntu`, or the `debian` machine an older ChairLift
+created (`devtools.ParseNSLList` prefers `ubuntu`; other machine names are the
+user's and are ignored). It creates an Ubuntu 26.04 machine (`ubuntu`) only when
+neither exists — never a second machine beside `debian` — then starts the
+managed machine and proves shell readiness with
+`nsl run -m <machine> --cd / true`; the engine chooser says the built-in engine
+runs Debian while that machine is the legacy one. Disable runs `nsl stop <machine>` on that machine only and keeps
+data; `nsl shutdown` would stop every machine and nsl VM, the user's included
+(#546), and the shared VM powers off by itself after its last machine. Lima installs
 `lima`, adds its SSH include, creates/starts Ubuntu LTS with a writable home,
 enables autostart and verifies `limactl shell ubuntu true`. Its disable removes
 autostart and stops Ubuntu without deleting its disk. A listed/running VM

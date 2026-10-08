@@ -90,7 +90,7 @@ Its sidebar title is "Apps"; `applications_page` is the configuration key.
 | Group | Key | Description |
 |-------|-----|-------------|
 | App collections | `brew_bundles_group` | Install a curated set of apps and tools in one step, discovered as `*.Brewfile` definitions; displayed first |
-| Homebrew packages | `brew_group` | Homebrew applications (installed casks), then Command line tools (explicitly requested formulae), then Packages from Homebrew containing the Brewfile exporter; uninstall and formula pin/unpin actions |
+| Homebrew packages | `brew_group` | Installed apps (installed casks), then Command line tools (explicitly requested formulae), then Backup containing the Export app list row (a Brewfile export); uninstall and formula pin/unpin actions |
 
 Both groups are enabled in the shipped `config.yml`. Dependency-only formulae
 do not appear in the inventory. Apps has no Flatpak inventory, external catalog
@@ -143,8 +143,8 @@ to ChairLift's log, which is where to look when filing a bug report.
 | Gaming Mode | `gaming_group` | Selectively installs chosen Flatpak applications and runtime extensions system-wide (`flatpak install --system`) from the system Flathub remote Bluefin-family images configure, authorized by Flatpak's own PolicyKit rather than by ChairLift; reports user and system installed scopes and persistent partial failures. A copy an earlier release installed per-user counts as installed. Remove Selected removes each selected app from every scope it is installed in, after a confirmation that system-wide copies go for every account, except a system copy the OS image declares it ships (Flatpak `preinstall.d` or `/usr/share/ublue-os/homebrew/system-flatpaks.Brewfile`), which is left in place; shown only when `/usr/share/ublue-os/image-info.json` is present |
 | Printers | `printers_group` | Printer applications: one switch per driver family (Ghostscript, HPLIP, Gutenprint), each a rootless Podman quadlet under `~/.config/containers/systemd` driven with `systemctl --user`. Crosses no privilege boundary, so it has no `pkexec` route. Hidden where `podman` is absent. A family may be turned on only when its web administration is authenticated or absent ([ADR-0016](adr/0016-printer-app-admin-denied-until-authenticated.md)); until the published images accept that setting new enables are locked and the row says what is needed. Existing units remain manageable for disabling. The rows evaluate systemd state, journal logs, and container images to diagnose actionable failures (device access, image availability, plugin verification, service crash) rather than a false enabled indicator |
 
-Developer options include WSL Mode (persistent Linux machines in systemd-vmspawn
-via nsl by default, or Ubuntu LTS in Lima). nsl needs an x86-64 Linux host;
+Developer options include WSL Mode (an Ubuntu machine in systemd-vmspawn via
+nsl by default, or Ubuntu LTS in Lima). nsl needs an x86-64 Linux host;
 Lima supports amd64 and arm64. Both require hardware virtualization and
 `/dev/kvm` access. The group also offers the base image's
 Docker daemon, and individually chosen IDEs/editors with one JetBrains Toolbox
@@ -154,9 +154,11 @@ the real daemon socket to be accessible, not just installed CLI tools. These
 privileged operations use only `kvm-enable`, `docker-enable`, and
 `docker-disable` with fixed argv and the account derived from `PKEXEC_UID`.
 
-The **WSL Backend** chooser changes the current window's backend without rewriting
+The **Virtual machine engine** chooser (Built-in for nsl, or Lima) changes the current window's backend without rewriting
 YAML. `wsl_backend` supplies the initial choice; an existing Lima Ubuntu machine
-with no nsl machine resolves the nsl default to Lima.
+with no ChairLift nsl machine resolves the nsl default to Lima. nsl keeps using
+the `debian` machine an older ChairLift created instead of creating `ubuntu`
+beside it, and the chooser then says the built-in engine runs Debian.
 
 `dx_group` takes `wsl_backend`, the WSL Mode backend: `nsl` (default) or
 `lima`; any other value is a configuration error. It also supports optional steps that run off the GTK main
@@ -216,7 +218,7 @@ pair and unit file, and dry-run restores both switches without writes.
 |-------|-----|-------------|
 | Storage | `maintenance_freespace_group` | The single "Free up space" action: `brew cleanup` plus `flatpak uninstall --unused`. The same key gates the post-update maintenance step of an update run, so cleanup cannot be on in one place and off in the other |
 | Maintenance tasks | `maintenance_cleanup_group` | Administrator-configured scripts, listed separately and never folded into "Free up space" (disabled by default) |
-| Powerwash | `reset_group` | Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Roll Back and Published versions (Pin, Return to stream) are gated by `updates_page.bootc_updates_group`; the detail retains its `recovery` route identity |
+| Powerwash | `reset_group` | Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Roll Back and Published versions (Pin, Go back to regular updates) are gated by `updates_page.bootc_updates_group`; the detail retains its `recovery` route identity |
 
 `maintenance_cleanup_group` supports:
 
