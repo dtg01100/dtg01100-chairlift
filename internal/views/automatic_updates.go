@@ -137,5 +137,52 @@ func (uh *UserHome) onAutomaticUpdatesToggled(enabled bool, toggle *guardedSwitc
 			}
 			uh.toastAdder.ShowToast(decision.Toast)
 		})
+
+		// Post-check the resume-from-suspend timer (#558). The helper
+		// is supposed to mask it when the user turns automatic updates
+		// off, but the GUI ships through Homebrew while the helper
+		// ships through the image: until the image re-pulls, the new
+		// helper's resume-timer mask is absent and the switch reports
+		// "off" while uupd-resume.timer still fires uupd.service
+		// after every resume. Re-probing the timer in the user
+		// session surfaces that skew as a follow-up toast so the user
+		// is not left to discover it themselves.
+		//
+		// The probe runs on a background goroutine, not the main
+		// thread, with the same autoUpdateProbeTimeout the
+		// page-construction probe uses so a wedged systemctl cannot
+		// stall the toast queue. Its result is posted back to the
+		// main thread for the toast, matching every other privileged
+		// view's pattern. The probe is unprivileged (systemctl
+		// is-enabled); any probe error is treated as "no skew" rather
+		// than surfaced, because a transient read failure should not
+		// turn a successful toggle into a warning. enable=true is also
+		// not a skew: the unmask-on-enable path leaves the resume
+		// timer masked regardless of helper version.
+		probeResumeSkew(enabled, func(skew bool) {
+			sgtk.RunOnMainThread(func() {
+				if toast := actionmsg.AutomaticUpdatesResumeOutdated(enabled, skew); toast != "" {
+					uh.toastAdder.ShowErrorToast(toast)
+				}
+			})
+		})
+	}()
+}
+
+// probeResumeSkew runs the post-action resume-timer read in a goroutine
+// and calls back with the result. enabled is the switch position the
+// user just asked for; only "disable + resume timer still enabled" is
+// a skew. The callback runs on the goroutine, so the caller must marshal
+// the result to the main thread (every privileged view does the same
+// thing for its own follow-up reads).
+func probeResumeSkew(enabled bool, onResult func(skew bool)) {
+	if enabled {
+		onResult(false)
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), autoUpdateProbeTimeout)
+		defer cancel()
+		onResult(autoupdate.DetectResume(ctx) == autoupdate.ResumeStateAvailable)
 	}()
 }
