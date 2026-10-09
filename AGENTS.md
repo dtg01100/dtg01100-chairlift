@@ -260,7 +260,13 @@ An agent must not break these:
   Bluefin's distro layer ships (projectbluefin/common#1396) because an
   extension's command runs without Homebrew on `$PATH`. ChairLift changes only
   that entry's visibility and never rewrites its command; a slot whose command
-  the user changed is not claimed.
+  the user changed is not claimed. The extension renders only slots listed in
+  its `command-order` key, so Ask Bluefin reads as shown only when its tuple is
+  visible **and** its slot is listed (Dakota moves the entry to `command12`
+  while inheriting an order of 1..11). Showing it appends a missing slot to
+  `command-order`, preserving the rest of the order, under the same
+  reset-when-matching-the-distro-default rule; hiding it changes only the
+  tuple's visible flag.
 - **The release-channel table is keyed on the image, never on the tag alone.**
   `internal/imageinfo`'s `imageChannelMap` records, per registry path, which
   tags are stable streams, which are testing streams, and how each maps to
@@ -352,7 +358,8 @@ An agent must not break these:
   extreme case and the shape to copy: it is the most destructive privileged
   action ChairLift offers, so both the program (`bootc`) and its entire argv
   (`ubluehelper.FactoryResetArgs`, the fixed
-  `install reset --experimental --apply`) are spelled in the helper, and the
+  `install reset --experimental`, never `--apply`, which bootc documents as
+  always rebooting at once) are spelled in the helper, and the
   GUI sends nothing but the command word — a factory reset has exactly one
   target, the image already booted, so there is nothing for a caller to name.
   `rollback` is the same shape with an even shorter argv.
@@ -363,8 +370,16 @@ An agent must not break these:
   404; any other error refuses. Unpin requires a dated booted tag and verifies
   the recovered stream. Both enforce container signature policy. Dry runs
   derive without registry access; both commands require a valid channel table.
-  `internal/ubluehelper`'s tests assert
-  this per command, and the e2e boundary test asserts the installed binary
+  The GUI no longer calls `pin` or `unpin` (#522 withdrew the Powerwash
+  calendar); the commands and their PolicyKit actions stay for a later
+  surface.
+  Channel switch, driver switch, pin, and unpin all run through the helper's
+  `switchImage`, which falls back to the fixed `bootc rollback` when a
+  composefs `bootc switch` refuses a target that is the rollback deployment
+  (unpin's usual case); `internal/installcheck`'s
+  `TestHelperImageSwitchesGoThroughSwitchImage` holds that wiring.
+  `internal/ubluehelper`'s tests assert the argv validation
+  per command, and the e2e boundary test asserts the installed binary
   rejects each shape. `cmd/chairlift-helper`'s dispatch carries a
   `default` arm that exits non-zero: a command the parser accepts and the
   switch does not handle would otherwise exit 0 having done nothing, which
@@ -439,10 +454,16 @@ An agent must not break these:
   and `cmd/` and fails on any other occurrence; it takes no exemptions.
   The same package owns what a dismissed authentication looks like
   (`IsAuthDismissed`, `MessageIsAuthDismissed`: exit 126 or pkexec's
-  "Request dismissed"; 127 is a real failure). `Window.ShowErrorToast`
-  turns such a message into a brief "Authentication cancelled" toast instead
-  of a persistent raw-stderr error, so every privileged view gets it; the
-  view still restores its control on that path.
+  "Request dismissed"; 127 is a real failure) and the brief
+  `pkexec.CancelledMessage` ("Authentication cancelled") shown in its place.
+  `Window.ShowErrorToast` turns a message carrying that text into the brief
+  toast instead of a persistent raw-stderr error. A view whose failure toast
+  is fixed text without the helper's output — Download, early updates, and
+  the graphics-driver switch on Updates — never carries the text, so it
+  classifies the error itself through `pageview.PrivilegedFailureToast`; a
+  configured `sudo` maintenance script's runner captures no stderr, so
+  `actionmsg.MaintenanceScriptFailure` does the same. The view still restores
+  its control on that path.
 - **Privileged integration ships in the release archive.** The Homebrew cask
   installs the GUI in user scope and cannot place root-owned files, so the
   release archive also carries the fixed-path updex and ublue helpers, the
@@ -607,6 +628,9 @@ An agent must not break these:
   pin/unpin, and every row shares one gate across its mutation controls so
   actions cannot overlap. A live success completes the old controls and starts
   a generation-guarded inventory refresh; failure or dry-run restores them.
+  Row gates come from the list's `actionstate.RowGates`, so a rebuild waits
+  while any row action (or its confirmation) is running instead of replacing
+  its busy controls with idle ones, and reloads once the last one settles.
   ChairLift's own cask (`pageview.IsSelfCask`) stays listed without an
   Uninstall button, so the page cannot delete the running application.
   Package-list export likewise holds an `actionstate.Gate`, shows a spinner
@@ -639,7 +663,8 @@ An agent must not break these:
   for the old pair must not render after the refresh.
 - **Update inventory and badge have one state owner.** The pure
   `internal/updateflow.Coordinator` owns all source inventory and the badge;
-  the shell renders snapshots and manual update actions share its admission.
+  the shell renders snapshots and manual update actions — and the channel and
+  driver switches, which replace the OS — share its admission.
   Failed observations preserve confirmed state, and previews mutate none of it.
   Do not restore separate counts or a provider-status owner in `UserHome`.
 - **Developer options remain discoverable without privileged support.** WSL
@@ -810,7 +835,12 @@ An agent must not break these:
   second Goose starts; llmman would refuse a launch while that lock is held.
   GNOME's focus-stealing prevention may answer with a "Goose is ready"
   notification rather than raising the window (observed in the lab on a
-  minimized window); nothing passes an activation token. Copy never
+  minimized window); nothing passes an activation token. A fresh launch
+  holds the row busy until Goose holds that lock, exits, or 15 seconds pass,
+  and the toast says whether it started or handed off
+  (`agentmode.LaunchResult`, `pageview.GooseLaunchToast`), never that a
+  window opened: a Goose that cannot draw (#544) still holds the profile.
+  Both launches send Goose's output to ChairLift's stderr. Copy never
   claims a session's questions stay on this computer: knowledge searches go
   online. No pkexec route is involved, every install is user-scope Homebrew,
   and dry-run writes and installs nothing. Keep `brew tap` in Homebrew's
@@ -828,37 +858,30 @@ An agent must not break these:
   parse renders a blank changelog with nothing in the chain reporting a
   failure, which is a bug finupdate shipped. The diff runs only when the user
   presses Compare, because each side is tens of megabytes.
-- **The dated-build catalog reads the registry, and reads it read-only.**
-  `internal/registrytags` is the leaf package behind the rollback calendar
-  (ADR-0013): `Client.Tags` lists a repository through the registry's
-  `Link: rel="next"` pagination, `ParseBuild` reads the day out of the tag
-  name, and `Client.Tag` resolves one tag to its digest and its
-  `org.opencontainers.image.created` timestamp. Every request goes through the
-  `Client.HTTP` transport, the same seam `internal/sbom` uses, so no gate in
-  `make ci` makes an outbound request — its tests drive a loopback `httptest`
-  registry that models GHCR's pagination, its 404 `MANIFEST_UNKNOWN`, and the
-  fact that the response's `Content-Type` header, not the body's `mediaType`
-  field, is the media-type authority (GHCR omits `mediaType` on some dated-tag
-  manifests — verified 2026-09-22). Two rules keep it safe to grow: no
-  registry-supplied string may become a privileged switch target. Pin and
-  unpin call only `Client.Tag` to verify targets already derived from the
-  descriptor, channel table, and validated day (ADR-0017), discarding the
-  response data. The catalog is never baked, cached to disk, or served stale,
-  because a catalog that is not the registry's is the failure this design
-  exists to avoid. A failed read is returned to the caller, never cached and
-  never replaced by a previous answer. `Catalog` caches in process only,
-  bounded by `MaxEntries` and expiring at `TTL`, and its callers run off the
-  GTK main thread, so it must stay safe for concurrent readers. `Catalog`'s
-  one caller is the Powerwash page's **Published versions** row
-  (`internal/views/versions.go`), which reads the registry when the user presses
-  Check, lists one row per day of the running stream
-  (`pageview.PublishedVersions` drops other streams' aliases), removes the
-  last list when a read fails rather than leaving it standing as current,
-  and offers a confirmed Pin action for each build that stages a switch to
-  that dated tag (`chairlift-helper pin <YYYYMMDD>`). When booted on a dated
-  tag, Powerwash offers **Go back to regular updates** (`chairlift-helper unpin`).
-  `internal/bootc.CheckUpdate` also calls `Client.Tag` directly on composefs
-  hosts (below); it only compares digests.
+- **The registry tag reader is read-only, and the GUI offers no calendar.**
+  `internal/registrytags` (ADR-0013) lists a repository through the
+  registry's `Link: rel="next"` pagination (`Client.Tags`), reads the day out
+  of a tag name (`ParseBuild`), and resolves one tag to its digest and its
+  `org.opencontainers.image.created` timestamp (`Client.Tag`). Every request
+  goes through the `Client.HTTP` transport, the same seam `internal/sbom`
+  uses, so no gate in `make ci` makes an outbound request — its tests drive a
+  loopback `httptest` registry that models GHCR's pagination, its 404
+  `MANIFEST_UNKNOWN`, and the fact that the response's `Content-Type` header,
+  not the body's `mediaType` field, is the media-type authority (GHCR omits
+  `mediaType` on some dated-tag manifests — verified 2026-09-22). No
+  registry-supplied string may become a privileged switch target: the
+  helper's pin and unpin call only `Client.Tag` to verify targets already
+  derived from the descriptor, channel table, and validated day (ADR-0017),
+  discarding the response data. A failed read is returned to the caller,
+  never cached and never replaced by a previous answer. The Powerwash
+  page's published-versions calendar (Published versions with per-day Pin,
+  and Return to stream) is withdrawn (#522): the dated tags it listed exist
+  only for the deprecated `latest` stream, so Powerwash offers Roll Back
+  only, and the in-process `Catalog` cache and the `ublue.Pin`/`ublue.Unpin`
+  client wrappers went with it. The helper's `pin`/`unpin` commands and their
+  PolicyKit actions remain. The GUI's one remaining registry reader is
+  `internal/bootc.CheckUpdate`, which calls `Client.Tag` on composefs hosts
+  (below) and only compares digests.
 - **Reading OS state never needs a password.** bootc 1.16 refuses
   `bootc status` and `bootc upgrade --check` without root, which left the
   operating-system source "not available" on every Dakota host (#381).
@@ -922,7 +945,7 @@ An agent must not break these:
   prerequisite, with identical behavior for
   cold and running instances.
 - **Contribute to Bluefin launches the contributor appliance in a terminal through `ujust`.**
-  `agents_page` offers a "Contribute to Bluefin" action row that runs read-only preflight off the GTK thread (`internal/contribute.Preflight`) checking `xdg-terminal-exec`, `ujust` on PATH, `ujust --summary` containing the `contribute` recipe, `podman` on PATH, and the Hive registration file at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`. When preflight fails, a plain subtitle says what is missing without naming commands or paths and leaves the button insensitive; for missing registration a **Learn How** button opens `contribute.RegistrationURL` (`https://github.com/projectbluefin/contribute#configuration`). Ready actions launch `xdg-terminal-exec ujust contribute` via `launcher.Start`, reporting failures asynchronously. Previews under `--dry-run` log only and launch nothing.
+  `agents_page` offers a "Contribute to Bluefin" action row that runs read-only preflight off the GTK thread (`internal/contribute.Preflight`), at build and again each time the group is shown (one `ConnectMap` handler, generation-guarded and passive while a session holds the gate), checking `xdg-terminal-exec`, `ujust` on PATH, `ujust --summary` containing the `contribute` recipe, `podman` on PATH, and the Hive registration file at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`. When preflight fails, an actionable subtitle explains the missing requirement (for missing registration, a **Registration Guide** button opens `https://github.com/projectbluefin/contribute#configuration`; the URL is never spelled out as unclickable subtitle text) and leaves the button insensitive; a requirement fixed outside ChairLift is picked up the next time Agents is shown. Ready actions launch `xdg-terminal-exec ujust contribute` via `launcher.Run`, reporting failures asynchronously; when the session ends or fails to start, the button returns through a fresh preflight rather than a blind re-enable. Previews under `--dry-run` log only and launch nothing.
 - **Printer applications are rootless quadlets, locked until their
   administration is authenticated, and never a false enabled indicator.**
   `internal/printerapp` writes one `.container` quadlet per driver family

@@ -203,9 +203,14 @@ itself.
 
 Livery publishes selections and master-switch state through the pure
 `internal/views/liverystate` transitions. A failed save or dry-run preview
-keeps the confirmed selection and switch; when a selection saves but its
+keeps the confirmed selection and switch; every previewed switch flip, pick,
+and rotation change says so in a `[DRY-RUN] Preview:` toast built by the same
+`actionmsg` decision that withholds the commit. When a selection saves but its
 artwork fails, the persisted selection is shown and a toast names the failed
-step. Queued results recheck their shared serializer before publishing.
+step. Queued results recheck their shared serializer before publishing. Each
+section's master switch queues first-in-first-out in the same serializer as
+that section's picks and holds the section's rows insensitive until it lands,
+so turning a section off never races a pick's Apply.
 Rotation candidates overlay the confirmed pair while work is in flight.
 Unlike an artwork selection, a rotation preference commits only after the
 user manager accepts its unit; failure preserves the previous preference
@@ -216,9 +221,9 @@ pair and unit file, and dry-run restores both switches without writes.
 
 | Group | Key | Description |
 |-------|-----|-------------|
-| Storage | `maintenance_freespace_group` | The single "Free up space" action: `brew cleanup` plus `flatpak uninstall --unused`. The same key gates the post-update maintenance step of an update run, so cleanup cannot be on in one place and off in the other |
+| Storage | `maintenance_freespace_group` | The single "Free up space" action: `brew cleanup` plus `flatpak uninstall --unused`. The same key gates the post-update maintenance step of an update run, so cleanup cannot be on in one place and off in the other; while it is disabled, Preferences locks "Run maintenance after updates" off |
 | Maintenance tasks | `maintenance_cleanup_group` | Administrator-configured scripts, listed separately and never folded into "Free up space" (disabled by default) |
-| Powerwash | `reset_group` | Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Roll Back and Published versions (Pin, Go back to regular updates) are gated by `updates_page.bootc_updates_group`; the detail retains its `recovery` route identity |
+| Powerwash | `reset_group` | Powerwash (user Flatpaks and Distrobox containers) and Factory Reset (`bootc install reset --experimental`), irreversible actions disabled by default. Roll Back is gated by `updates_page.bootc_updates_group`; the detail retains its `recovery` route identity |
 
 `maintenance_cleanup_group` supports:
 
@@ -256,9 +261,9 @@ Help also shows a **Feature availability** group — not configurable, and absen
 
 | Field | Description |
 |-------|-------------|
-| `website` | Project website URL (default: `https://projectbluefin.io`) |
-| `issues` | Issue tracker URL (default: `https://github.com/projectbluefin/dakota/issues`) |
-| `chat` | Documentation URL (default: `https://docs.projectbluefin.io/`). The key is named `chat` for backward compatibility; the link is titled "Documentation" |
+| `website` | Documentation URL, titled "Browse documentation" (default: `https://docs.projectbluefin.io/`) |
+| `issues` | Issue tracker URL, titled "Report a problem" (default: `https://github.com/projectbluefin/dakota/issues`) |
+| `chat` | Assistant or community help URL, titled "Ask for help" (default: `https://ask.projectbluefin.io/`) |
 
 ## Example
 

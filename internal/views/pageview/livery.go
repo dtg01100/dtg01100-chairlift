@@ -106,6 +106,24 @@ func LiveryFoundationResults(query, selectedID string) []LiveryPickerResult {
 	return out
 }
 
+// LiveryFoundationTiles is the Top Bar Icon gallery's model: every foundation
+// in catalog order, so tile i is grid child i, with the confirmed selection
+// marked. A custom file or an unknown id marks no tile.
+func LiveryFoundationTiles(selectedID string) []LiveryPickerResult {
+	return LiveryFoundationResults("", selectedID)
+}
+
+// LiveryFoundationSelectedLabel names the badge on the selected gallery tile.
+const LiveryFoundationSelectedLabel = "Selected"
+
+// LiveryChooserEscapeCloses reports whether Escape in the chooser's search
+// field closes the dialog. GtkSearchEntry consumes Escape as stop-search, so
+// the chooser decides: a typed query is cleared first, and an empty field —
+// the state the chooser opens in — closes it.
+func LiveryChooserEscapeCloses(query string) bool {
+	return query == ""
+}
+
 // LiveryProjectResults returns the dock picker's rows for a query.
 func LiveryProjectResults(query, selectedID string) []LiveryPickerResult {
 	projects := livery.SearchCNCF(query, LiveryProjectResultLimit)
@@ -136,10 +154,11 @@ const LiveryBrandPickerTitle = "Choose a Brand"
 // LiveryBrandSearchPlaceholder is the brand search box's placeholder.
 const LiveryBrandSearchPlaceholder = "Search brands…"
 
-// LiverySelectedBrandRow describes the current app-grid selection.
-func LiverySelectedBrandRow(slug string) Row {
+// LiverySelectedBrandRow describes the current app-grid selection. A custom
+// selection names its file, exactly as the row read right after the pick.
+func LiverySelectedBrandRow(slug, customPath string) Row {
 	if slug == livery.CustomID {
-		return Row{Title: "Brand", Subtitle: "Your own file"}
+		return Row{Title: "Brand", Subtitle: LiveryCustomRow(customPath).Subtitle}
 	}
 	if icon, ok := livery.LookupSimpleIcon(slug); ok {
 		return Row{Title: "Brand", Subtitle: icon.Title}
@@ -147,10 +166,11 @@ func LiverySelectedBrandRow(slug string) Row {
 	return Row{Title: "Brand", Subtitle: "Choose a brand mark"}
 }
 
-// LiverySelectedProjectRow describes the current dock selection.
-func LiverySelectedProjectRow(selectedID string) Row {
+// LiverySelectedProjectRow describes the current dock selection. A custom
+// selection names its file, exactly as the row read right after the pick.
+func LiverySelectedProjectRow(selectedID, customPath string) Row {
 	if selectedID == livery.CustomID {
-		return Row{Title: "Project", Subtitle: "Your own file"}
+		return Row{Title: "Project", Subtitle: LiveryCustomRow(customPath).Subtitle}
 	}
 	if project, ok := livery.LookupCNCF(selectedID); ok {
 		return Row{Title: "Project", Subtitle: project.Name}

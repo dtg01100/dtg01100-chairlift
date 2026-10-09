@@ -39,6 +39,10 @@ groups Applications and Developer tools. Each row shows its own state, so you
 can see which source is holding you up without opening anything. A source
 your administrator turned off says **Disabled by administrator**; one this
 computer has no software for says **Not available on this computer** instead.
+**Preferences** (Ctrl+,) has a switch per source: a source you turn off there
+says **Disabled in preferences** as soon as you change it, and a source you
+cannot turn on shows its switch off, greyed out, with the same words as its row
+here.
 
 One button covers all of them. It reads **Check again** when nothing is
 pending, **Update all** when something is, and **Retry failed** if a source
@@ -95,7 +99,9 @@ duplicate it.
 
 **App collections** lead the page: each installs a group of apps and tools in
 one step. Installs show native activity and streamed command progress while
-they run, using the same controls in the explicit setup flow.
+they run, using the same controls in the explicit setup flow. A collection whose
+apps and tools are all already on the system reads **Installed** when the page
+loads, not only after an install in the same session.
 
 **Installed apps** and **Command line tools** follow: installed casks first,
 then explicitly requested formulae (the packages Homebrew manages).
@@ -104,7 +110,8 @@ first; formulae also offer pin and unpin actions. There is no Flatpak inventory,
 external catalog launcher, or package search here.
 
 Finally, **Backup** contains **Export app list**, which saves a list of your
-apps and tools to your home folder so you can reinstall them later.
+apps and tools to your home folder (named Brewfile, replacing any file already
+there) so you can reinstall them later.
 Export shows **Exporting…** and an activity spinner until it finishes, then
 becomes available again, including after a failed export.
 
@@ -125,7 +132,8 @@ downloaded. The row shows an activity spinner throughout setup and shutdown, the
 restores the switch if the operation fails.
 
 **Active Model** and **Recommended Presets** remain visible, becoming usable
-only when the local server is ready; then **Models and Chat** opens llmman's
+only when the local server is ready. **Choose…** lists the model families with
+the recommended one first and highlighted; **Models and Chat**'s **Open llmman** opens llmman's
 own web interface for pulling, removing, and trying models. The connection
 address is directly selectable, not hidden in Details.
 
@@ -141,7 +149,7 @@ configuration is never read or changed, and one session runs at a time. The
 desktop shortcut and `chairlift --ask-bluefin` launch Goose Desktop directly
 when ready, or open Control Center to the Agents page naming the missing
 requirement. **Show Ask Bluefin in menu** toggles the distribution's shortcut
-in GNOME's top panel menu. Apps and terminals opened
+in GNOME's top panel menu, and reads on only when the menu actually lists it. Apps and terminals opened
 after Agent Mode is on receive `OLLAMA_HOST`; already-open ones need restarting.
 Everything here runs in your own account, without an administrator password.
 
@@ -150,8 +158,8 @@ contribute tasks to Project Bluefin. Before launch, preflight verifies that
 `xdg-terminal-exec`, `ujust`, the `contribute` recipe, and `podman` are
 available, and that a Hive registration file is present. When a requirement is
 missing, the row says in plain words what is needed and keeps the action
-button unavailable until ready; a missing sign-up also shows **Learn How**,
-which opens the registration guide. In dry-run mode, it previews the launch
+button unavailable until ready; a missing sign-up also shows **Registration Guide**,
+which opens the setup instructions. In dry-run mode, it previews the launch
 without opening a terminal.
 
 ---
@@ -163,8 +171,9 @@ without opening a terminal.
 **Desktop integrations** offers **Tailscale Integration** and **Sync Folder
 Integration** switches for GNOME Quick Settings. Tailscale's initial switch
 position is on and Sync Folder's is off; once GNOME answers, the switches show
-its actual saved choices. Sync Folder is marked as not ready yet. A missing
-extension or GNOME session leaves its control unavailable and explains why.
+its actual saved choices. Sync Folder is labelled experimental. A missing
+extension or GNOME session leaves its switch off and unavailable and explains
+why.
 Changing a switch enables or disables that extension for your account; it does
 not install software or start Tailscale or Sync Folder services. Preview mode
 leaves GNOME preferences unchanged.
@@ -179,7 +188,10 @@ reader, the file, or anything you imported from it.
 Developer options also offer **WSL Mode** (nsl persistent Linux machines by
 default on x86-64 Linux, with Lima Ubuntu LTS as an alternative on amd64 or arm64),
 **Enable Docker**, and individually selected IDEs and terminal editors, including
-one JetBrains Toolbox entry. WSL needs hardware virtualization and access to
+one JetBrains Toolbox entry. Each editor row says what the tool is, and its
+Install button names the tool for screen readers. Installed state is read again
+whenever the page is shown, so a tool removed on Apps or in a terminal is
+offered again. WSL needs hardware virtualization and access to
 `/dev/kvm`; permission grants require a new login. Docker needs the base
 image's daemon and a socket this session can actually access; installing CLI
 tools is not readiness. Missing installed helper actions leave the affected
@@ -303,13 +315,9 @@ returns to the previous version if an update caused problems, **Powerwash**
 removes your Flatpak apps and Distrobox containers (everything on the Apps page
 stays), and **Factory Reset** reinstalls the operating system, warning first
 that its reset method is still experimental.
-Those stay hidden normally until turned on or until a rollback exists.
-Powerwash also has **Published versions**, which checks online for the versions
-released in the last 90 days and lists one per day, marking the one you are
-running and the one Roll Back returns to. Each version offers a **Pin** button
-to stop updates at that version. When pinned, Powerwash offers **Go back to
-regular updates**. Both ask you to confirm, and take effect at the next
-restart.
+Those stay hidden normally until turned on or until a rollback exists; the
+Powerwash entry's subtitle names only what the detail currently offers, and
+when the reset actions are off the detail says so at the top.
 
 ---
 
@@ -319,13 +327,16 @@ restart.
 
 **Troubleshooting**, the AI troubleshooting assistant, is on the Agents page.
 
-Three links, each shown only when it is configured: **Visit project
-website**, **Report a problem** (the `issues` URL, where bug reports go), and
-**Browse documentation**.
+Three links, each shown only when it is configured: **Browse documentation**
+(the `website` URL), **Report a problem** (the `issues` URL, where bug reports
+go), and **Ask for help** (the `chat` URL, Ask Bluefin on Bluefin).
 
 A **Diagnostics** group offers a **System diagnostics** row that copies
-details about this computer — OS, image, kernel, desktop, and GPU, without
-your user name or home folder — to the clipboard for a help request.
+details about this computer — OS, image, system version, full build digest,
+kernel, desktop, and GPU, without your user name or home folder — to the
+clipboard for a help request.
+The version and digest come from the same unprivileged status read as the
+Updates page's Details row, and are omitted where no deployment is readable.
 
 When the configuration turns on something this computer cannot run — Flatpak
 or Homebrew is absent, or the machine is not a native A/B install — **Feature

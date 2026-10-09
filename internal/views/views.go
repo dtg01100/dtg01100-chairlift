@@ -78,6 +78,9 @@ type UserHome struct {
 	// Apps collections share one install gate per collection.
 	bundleInstalls map[string]*bundleInstall
 	bundleButtons  buttonRoute
+	// bundleStatusRefresh lets only the newest installed-state check of the
+	// collections publish; see refreshBundleStatuses.
+	bundleStatusRefresh actionstate.RefreshGate
 
 	// One shared callback per rebuilt list; see buttonRoute. Each is cleared
 	// alongside its row tracker, so reloads allocate no new trampolines.
@@ -120,6 +123,9 @@ type UserHome struct {
 	liveryPickerGeneration uint64
 	liveryFoundationGrid   *gtk.FlowBox
 	liveryFoundationImages map[string]*gtk.Image
+	// liveryFoundationChecks holds each gallery tile's selected-mark badge,
+	// index-aligned with livery.Foundations() and the grid's children.
+	liveryFoundationChecks []*gtk.Image
 	liveryDockSelectedRow  *adw.ActionRow
 	liveryDockRotate       *gtk.Switch
 	// liveryDockVisible is the result set currently drawn, so the list's one
@@ -151,7 +157,9 @@ type UserHome struct {
 	// it; these queue instead, and a pick that a newer one has already
 	// overtaken drops out. Without them two rapid picks can interleave and
 	// leave the persisted id naming one mark while the installed icon is
-	// another. See liverySelectionWork.
+	// another. The section's master switch reserves a place in the same
+	// line, so its Apply or Clear never races a pick. See
+	// liverySelectionWork and runLiveryToggleWork.
 	liveryAppGridWork actionstate.Serializer
 	liveryPanelWork   actionstate.Serializer
 	liveryDockWork    actionstate.Serializer
@@ -176,6 +184,15 @@ type UserHome struct {
 	bootcStageBtn      *gtk.Button
 	bootcActivityRow   *adw.ActionRow
 	bootcLogExpander   *adw.ExpanderRow
+	// System version readout (updates_page bootc_status_group), re-rendered
+	// from every observed bootc status rather than only the startup read.
+	// systemVersionRefresh orders those reads so an older one cannot land
+	// over a newer one.
+	systemVersionGroup   *adw.PreferencesGroup
+	systemVersionRow     *adw.ActionRow
+	systemVersionDetails *adw.ExpanderRow
+	systemVersionRows    rowset.Tracker[*adw.ActionRow]
+	systemVersionRefresh actionstate.RefreshGate
 	// The Roll Back group holds only the rollback row and is hidden with
 	// it, so a host with no previous deployment shows no orphaned heading.
 	bootcRollbackGroup *adw.PreferencesGroup
@@ -207,25 +224,31 @@ type UserHome struct {
 	// released as soon as the helper returns, while a Flatpak install keeps
 	// running off the main thread. Overlapping installs are
 	// refused by this gate, not by holding the switch insensitive.
-	developerFeedGate  actionstate.Gate
-	gamingGroup        *adw.PreferencesGroup
-	gamingRow          *adw.ActionRow
-	gamingComponents   []*gamingComponentRow
-	gamingInstall      *gtk.Button
-	gamingRemove       *gtk.Button
-	gamingGate         actionstate.Gate
-	gamingButtons      buttonRoute
-	gamingDialogs      dialogRoute
-	developerOptions   []*developerOptionRow
-	developerButtons   buttonRoute
-	wslBackend         string
-	wslCombo           *adw.ComboRow
-	wslSuppress        bool
-	wslBackendResolved bool
-	wslBackendNotify   func(gobject.Object, uintptr)
-	driverRow          *adw.ActionRow
-	driverButton       *gtk.Button
-	driverGate         actionstate.Gate
+	developerFeedGate actionstate.Gate
+	gamingGroup       *adw.PreferencesGroup
+	gamingRow         *adw.ActionRow
+	gamingComponents  []*gamingComponentRow
+	gamingInstall     *gtk.Button
+	gamingRemove      *gtk.Button
+	gamingGate        actionstate.Gate
+	gamingButtons     buttonRoute
+	gamingDialogs     dialogRoute
+	developerOptions  []*developerOptionRow
+	developerButtons  buttonRoute
+	// developerToolRefresh orders passive re-reads of the optional tools'
+	// installed state; developerToolsMapped, connected once at build,
+	// starts one each time the Developer group is shown, so a tool removed
+	// on Apps (or in a terminal) stops reading "Installed".
+	developerToolRefresh actionstate.RefreshGate
+	developerToolsMapped func(gtk.Widget)
+	wslBackend           string
+	wslCombo             *adw.ComboRow
+	wslSuppress          bool
+	wslBackendResolved   bool
+	wslBackendNotify     func(gobject.Object, uintptr)
+	driverRow            *adw.ActionRow
+	driverButton         *gtk.Button
+	driverGate           actionstate.Gate
 
 	// Staged-update changelog (SBOM diff), with visible Compare and optional
 	// result details in the system-update secondary group.
@@ -237,24 +260,13 @@ type UserHome struct {
 	changelogStaged   string
 	changelogGate     actionstate.Gate
 
-	// Published versions (the dated-build catalog, ADR-0013), listed on
-	// the Powerwash page below Roll Back, in its own group. runningVersion and
-	// previousVersion are the bootc versions of the booted and rollback
-	// deployments, recorded by loadBootcRollbackStatus.
-	publishedVersionsRow    *adw.ExpanderRow
-	publishedVersionsButton *gtk.Button
-	publishedVersionRows    []*adw.ActionRow
-	publishedVersionButtons buttonRoute
-	recoveryDialogs         dialogRoute
-	pinGate                 actionstate.Gate
-	unpinGate               actionstate.Gate
-	unpinRow                *adw.ActionRow
-	unpinBtn                *gtk.Button
-	publishedVersionsRepo   string
-	publishedVersionsStream string
-	publishedVersionsGate   actionstate.Gate
-	runningVersion          string
-	previousVersion         string
+	// recoveryDialogs routes the Powerwash page's confirmation dialogs.
+	recoveryDialogs dialogRoute
+	// recoveryEntryRow is the Maintenance page's Powerwash entry (nil when
+	// the entry is not built); bootcRollbackOffered records whether the
+	// detail's Roll Back group is currently shown, for its subtitle.
+	recoveryEntryRow     *adw.ActionRow
+	bootcRollbackOffered bool
 
 	// Agent Mode (agents_page agents_group)
 	agentModeRow       *adw.ActionRow
@@ -290,12 +302,17 @@ type UserHome struct {
 	askBluefinMapped  func(gtk.Widget)
 	askBluefinProbed  bool
 
-	// Contribute to Bluefin (agents_page)
+	// Contribute to Bluefin (agents_page). contributeMapped, connected once
+	// at build, re-runs preflight each time the group is shown;
+	// contributeRefresh drops a read a newer one or a session start
+	// superseded.
 	contributeRow     *adw.ActionRow
 	contributeButton  *gtk.Button
-	contributeHelp    *gtk.Button
+	contributeGuide   *gtk.Button
 	contributeSpinner *gtk.Spinner
 	contributeGate    actionstate.Gate
+	contributeRefresh actionstate.RefreshGate
+	contributeMapped  func(gtk.Widget)
 
 	// Powerwash / Factory Reset (maintenance_page reset_group)
 	powerwashGate    actionstate.Gate
@@ -317,6 +334,11 @@ type UserHome struct {
 	closeRecoveryDetail func()
 
 	brewPackagesRefresh actionstate.RefreshGate
+	// formulaGates and caskGates hold each installed list's row gates, so a
+	// rebuild waits for a running uninstall or pin instead of replacing
+	// the only controls that show it.
+	formulaGates actionstate.RowGates
+	caskGates    actionstate.RowGates
 }
 
 // New creates a new UserHome views manager.
@@ -370,8 +392,9 @@ func (uh *UserHome) groupEnabled(page, group string) bool {
 	return capability.Compose(uh.config.IsGroupEnabled, uh.capabilities)(page, group)
 }
 
-// OnUpdateFinished refreshes the installed app inventories and Compare pair
-// after verified live updates. The shell remains the only badge owner.
+// OnUpdateFinished refreshes the installed app inventories, the Compare pair,
+// and the System version readout after verified live updates. The shell
+// remains the only badge owner.
 func (uh *UserHome) OnUpdateFinished(final updateflow.Snapshot) {
 	if final.Preview {
 		return
@@ -382,6 +405,7 @@ func (uh *UserHome) OnUpdateFinished(final updateflow.Snapshot) {
 			go uh.loadHomebrewPackages()
 		case updateflow.OperatingSystem:
 			go func() {
+				versionGeneration := uh.systemVersionRefresh.Begin()
 				ctx, cancel := bootc.DefaultContext()
 				defer cancel()
 				status, err := bootc.GetStatus(ctx)
@@ -391,6 +415,7 @@ func (uh *UserHome) OnUpdateFinished(final updateflow.Snapshot) {
 				}
 				sgtk.RunOnMainThread(func() {
 					uh.refreshChangelogAvailability(status)
+					uh.renderSystemVersion(versionGeneration, status)
 				})
 			}()
 		}

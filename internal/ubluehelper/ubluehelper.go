@@ -214,6 +214,30 @@ func parseChannel(word string) (imageinfo.Channel, bool) {
 	}
 }
 
+const (
+	// DefaultTimeout bounds a helper command that does not pull an image.
+	DefaultTimeout = 10 * time.Minute
+
+	// ImageSwitchTimeout bounds a command that runs `bootc switch`. A switch
+	// to another channel, driver variant, or dated build pulls the same
+	// multi-gigabyte image an OS update stages, so it gets the OS staging
+	// budget (bootc.DefaultTimeout) rather than the default: at ten minutes a
+	// slow link had its pull killed mid-transfer.
+	ImageSwitchTimeout = 30 * time.Minute
+)
+
+// Timeout returns how long the helper lets command run. The GUI's context
+// for the same command must outlast it (see ublue), so the helper reports
+// its own outcome instead of the caller giving up first.
+func Timeout(command string) time.Duration {
+	switch command {
+	case CommandChannelSwitch, CommandDriverSwitch, CommandPin, CommandUnpin:
+		return ImageSwitchTimeout
+	default:
+		return DefaultTimeout
+	}
+}
+
 // RestartArgs returns the argv that restarts the machine.
 //
 // `systemctl reboot` takes no target, no delay, and no options here: the only
@@ -272,6 +296,14 @@ func RollbackArgs() []string {
 	return []string{"rollback"}
 }
 
+// IsSameRollbackRefusal reports whether an error or stderr output from `bootc switch`
+// is the composefs refusal indicating the target matches the existing rollback deployment's
+// fs-verity digest.
+func IsSameRollbackRefusal(output string) bool {
+	return strings.Contains(output, "has the same fs-verity digest as the existing Some(Rollback) deployment") ||
+		(strings.Contains(output, "same fs-verity digest") && strings.Contains(output, "Rollback"))
+}
+
 // FactoryResetArgs returns the argv that replaces the running deployment
 // with a fresh install of the same image, discarding every local change:
 // `bootc install reset`.
@@ -279,14 +311,16 @@ func RollbackArgs() []string {
 // `--experimental` is required by bootc itself — this reset path is not
 // stabilized upstream — and ChairLift does not hide that from the argv or
 // from the confirmation dialog that must be shown before this ever runs
-// (pageview.FactoryResetConfirmation). `--apply` makes the reset take effect
-// immediately rather than only staging it, because a "staged" factory reset
-// that silently applies at the next unrelated restart is a worse surprise
-// than the operation itself. Like Restart and Rollback this takes no
-// caller-supplied value: a factory reset has exactly one target, the image
-// already booted.
+// (pageview.FactoryResetConfirmation). `--apply` is deliberately absent:
+// bootc documents it as "Restart or reboot into the new target image.
+// Currently, this option always reboots", so carrying it rebooted the
+// machine the moment the user authenticated, discarding unsaved work, while
+// every user-facing string promises the reset applies at the next restart.
+// Without it bootc prepares the fresh deployment and the user restarts when
+// ready. Like Restart and Rollback this takes no caller-supplied value: a
+// factory reset has exactly one target, the image already booted.
 func FactoryResetArgs() []string {
-	return []string{"install", "reset", "--experimental", "--apply"}
+	return []string{"install", "reset", "--experimental"}
 }
 
 // AutoUpdateArgs returns the ordered systemctl argv lists that turn automatic
@@ -300,7 +334,16 @@ func FactoryResetArgs() []string {
 // disabling, so that a package upgrade re-running `systemctl preset` cannot
 // quietly re-enable something the user turned off.
 //
-// The unit name is fixed to autoupdate.TimerUnit rather than passed in: a
+// Every unattended trigger of uupd.service is covered, not just the timer the
+// switch reports: autoupdate.ResumeTimerUnit fires the same service after
+// every resume. Disabling masks it with --now, which also stops a timer
+// already armed by a resume; systemctl masks and stops a unit that is absent
+// without error, so images that do not ship it still succeed. Enabling only
+// unmasks it: its enablement links are never removed, so unmasking restores
+// exactly what the image (or the user) had, without trying to enable a unit
+// an image may not ship.
+//
+// The unit names are fixed in autoupdate rather than passed in: a
 // caller-supplied unit would let an authenticated user enable or mask any
 // systemd unit on the machine.
 func AutoUpdateArgs(command string) ([][]string, bool) {
@@ -309,11 +352,13 @@ func AutoUpdateArgs(command string) ([][]string, bool) {
 		return [][]string{
 			{"unmask", autoupdate.TimerUnit},
 			{"enable", "--now", autoupdate.TimerUnit},
+			{"unmask", autoupdate.ResumeTimerUnit},
 		}, true
 	case CommandAutoDisable:
 		return [][]string{
 			{"disable", "--now", autoupdate.TimerUnit},
 			{"mask", autoupdate.TimerUnit},
+			{"mask", "--now", autoupdate.ResumeTimerUnit},
 		}, true
 	default:
 		return nil, false

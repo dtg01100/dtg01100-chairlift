@@ -23,6 +23,49 @@ func TestChoicesRoundTripForEveryFoundation(t *testing.T) {
 	}
 }
 
+// TestFoundationTilesMarkExactlyTheSelection holds the gallery's model to
+// the grid it drives: every foundation, in catalog order (tile i is grid
+// child i), with the confirmed selection — and only it — marked, for every
+// entry in the catalog (W3-12).
+func TestFoundationTilesMarkExactlyTheSelection(t *testing.T) {
+	catalog := livery.Foundations()
+	for _, want := range catalog {
+		tiles := LiveryFoundationTiles(want.ID)
+		if len(tiles) != len(catalog) {
+			t.Fatalf("LiveryFoundationTiles(%q) has %d tiles, catalog has %d", want.ID, len(tiles), len(catalog))
+		}
+		for i, tile := range tiles {
+			if tile.ID != catalog[i].ID {
+				t.Errorf("tile %d is %q, catalog position %d is %q", i, tile.ID, i, catalog[i].ID)
+			}
+			if tile.Selected != (tile.ID == want.ID) {
+				t.Errorf("selection %q: tile %q selected=%v", want.ID, tile.ID, tile.Selected)
+			}
+		}
+	}
+	for _, none := range []string{livery.CustomID, "", "no-such-foundation"} {
+		for _, tile := range LiveryFoundationTiles(none) {
+			if tile.Selected {
+				t.Errorf("selection %q marked tile %q", none, tile.ID)
+			}
+		}
+	}
+}
+
+// TestChooserEscapeClearsAQueryThenCloses pins the chooser's Escape: the
+// search field consumes the key, so an empty field must close the dialog —
+// the state it opens in — and a typed query is cleared first (W3-03).
+func TestChooserEscapeClearsAQueryThenCloses(t *testing.T) {
+	if !LiveryChooserEscapeCloses("") {
+		t.Error("Escape in an empty chooser search did not close the chooser")
+	}
+	for _, query := range []string{"gnome", " "} {
+		if LiveryChooserEscapeCloses(query) {
+			t.Errorf("Escape with query %q closed the chooser instead of clearing it", query)
+		}
+	}
+}
+
 // TestUnknownSelectionFallsBackToTheDefault asserts a stale dconf value lands
 // the combo somewhere valid rather than leaving it unselected.
 func TestUnknownSelectionFallsBackToTheDefault(t *testing.T) {
@@ -121,6 +164,28 @@ func TestNoResultsRowNamesTheCatalogItSearched(t *testing.T) {
 		if tc.surface != livery.Dock && strings.Contains(row.Subtitle, "cncf/artwork") {
 			t.Errorf("surface %d: subtitle %q blames cncf/artwork", tc.surface, row.Subtitle)
 		}
+	}
+}
+
+// TestSelectedRowsNameTheCustomFileOnEverySurface holds that a custom
+// selection still names its file after a reload, as it does right after the
+// pick. The brand and project rows once answered "Your own file" on load
+// while the panel row kept the path.
+func TestSelectedRowsNameTheCustomFileOnEverySurface(t *testing.T) {
+	const path = "/home/u/mark.svg"
+	want := LiveryCustomRow(path).Subtitle
+	rows := map[string]Row{
+		"brand":      LiverySelectedBrandRow(livery.CustomID, path),
+		"project":    LiverySelectedProjectRow(livery.CustomID, path),
+		"foundation": LiverySelectedFoundationRow(livery.CustomID, path),
+	}
+	for name, row := range rows {
+		if row.Subtitle != want {
+			t.Errorf("%s row subtitle %q, want %q", name, row.Subtitle, want)
+		}
+	}
+	if got := LiverySelectedProjectRow(livery.DefaultCNCFID, path).Subtitle; got == want {
+		t.Errorf("a catalog project row shows the custom path %q", got)
 	}
 }
 

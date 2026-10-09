@@ -198,6 +198,15 @@ work there. Screenshots are one PipeWire frame from Mutter's ScreenCast API.
   `Flatpak` capability is absent. An Apps-only no-list assertion must omit the
   image descriptor or disable Gaming, rather than treating a legitimate
   Gaming read as evidence the Apps page still manages Flatpaks.
+- **Never read tags from `scenario.effective_tags`.** It is a set, so
+  `@stub.a @stub.b` ran `b` before `a` and a refining stub was overwritten by
+  its base. `environment.py`'s `before_scenario` builds the list from
+  `feature.tags`, the rule's tags and `scenario.tags` in written order, so
+  stubs apply left to right and a later stub may replace an earlier one's fake.
+- **A switch cannot be moved back inside its own `state-set` emission.**
+  `guardedSwitch.set` called synchronously from the user-change handler is
+  overridden when the emission finishes, so a refused toggle stays on. Revert
+  through `sgtk.RunOnMainThread` (the refused branch of `onChannelToggled`).
 - **dogtail.tree connects to the bus at import.** The helper library imports
   it lazily so `TestATSPIFeaturesHaveNoUndefinedSteps` (behave `--dry-run`)
   needs no display. dogtail's `checkForA11y` must be off before import: the
@@ -236,6 +245,13 @@ work there. Screenshots are one PipeWire frame from Mutter's ScreenCast API.
   and then given another child (`SetChild`) reports an empty name even with
   an explicit `LABEL` property; build such buttons with `gtk.NewButton()`
   (#508, every Apps collection Install button).
+- **An `AdwActionRow` activatable widget is named by the row title.**
+  `SetActivatableWidget` adds a `LABELLED_BY` relation to the title, so a
+  button labelled "Open llmman" in a "Models and Chat" row announces itself
+  as "Models and Chat" — a name without its visible label (WCAG 2.5.3).
+  Call `ResetRelation(gtk.AccessibleRelationLabelledByValue)` after
+  `SetActivatableWidget` unless the button's label is the row title, and
+  have the scenario click the button by its visible label.
 
 **Learned from:** #366/#375 (turning the probe on in CI) and #357's Wave 0,
 which replaced the one-probe-per-feature TSV harness — every community PR

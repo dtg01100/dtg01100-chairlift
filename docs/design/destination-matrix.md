@@ -26,7 +26,7 @@ Tools or Local AI tools route. Wallpaper is not a shipped control.
 | `livery` | `livery_page.go`, `livery_actions.go`, `profile_picture.go` | Profile Picture, App Launcher Icon, Top Bar Icon and Files Icon, with login rotation for the foundation surfaces |
 | `maintenance` | `maintenance_page.go` | Free up space, trusted administrator scripts and Powerwash entry |
 | `help` | `help_page.go` | Support links, diagnostics and capability explanations |
-| `recovery` | `recovery.go`, `reset.go`, `versions.go` | Previous-deployment rollback, live published-version reads, confirmed pin/return-to-stream and opt-in reset actions |
+| `recovery` | `recovery.go`, `reset.go` | Previous-deployment rollback and opt-in reset actions (the published-versions calendar is withdrawn, #522) |
 
 ## Configuration references and owners
 
@@ -39,7 +39,7 @@ inventory; derive schema additions from source rather than a frozen count.
 | Configuration page | Group | Current mount / owner |
 | --- | --- | --- |
 | `updates_page` | `automatic_updates_group` | Updates; `onAutomaticUpdatesToggled`, observed through `internal/autoupdate`, writes via `ublue.SetAutomaticUpdates` |
-| `updates_page` | `bootc_updates_group` | Updates staging/Compare and Powerwash rollback/catalog/pin/unpin; `onBootcStageClicked`, `onChangelogClicked`, `onBootcRollbackClicked`, `onPublishedVersionsClicked`, `confirmPin` / `runPin`, `confirmReturnToStream` / `runReturnToStream` |
+| `updates_page` | `bootc_updates_group` | Updates staging/Compare and Powerwash Roll Back; `onBootcStageClicked`, `onChangelogClicked`, `onBootcRollbackClicked` |
 | `updates_page` | `flatpak_updates_group` | Updates applications source; `updateflow.Coordinator` / `UpdateShell` |
 | `updates_page` | `brew_updates_group` | Updates developer-tools source; `updateflow.Coordinator` / `UpdateShell` |
 | `updates_page` | `brew_trust_group` | Updates; `confirmTrustTap` / `trustTap`, unprivileged `homebrew.TrustPackages` |
@@ -90,7 +90,10 @@ The pure `updateflow.Coordinator` owns source inventory, phases and aggregate
 counts. The shell is snapshot rendering and event wiring; production
 `internal/updateproviders` wraps existing Flatpak, Homebrew, updex and bootc
 entry points. `UpdateShell.beginMutation` admits manual item updates, metadata
-refresh, dedicated staging and the unified run. Failed observations preserve
+refresh, dedicated staging, the unified run, and the Advanced channel and
+graphics-driver switches, which replace the operating system and must not race
+an update run's staging; a refused Download or switch shows
+`pageview.UpdateBusyToast`. Failed observations preserve
 confirmed state; dry-run previews mutate none of it. Restart is offered from
 the Operating system row only after an observed staged deployment, through the
 fixed `ublue.Restart` action, not an invented update executor.
@@ -99,9 +102,8 @@ Provider-specific safety remains with each live owner:
 
 - Staging uses the fixed bootc stage path and bounded streamed logs. Compare
   starts only on a click, with pinned image references and stale-result guards.
-  Published versions are read-only registry observations. Pin and Go back to regular updates
-  require confirmation and installed helper support; only a validated day or
-  fixed unpin word crosses pkexec, never a registry-supplied image reference.
+  Powerwash offers no published-versions calendar, pin or return to stream
+  (#522); the helper's `pin`/`unpin` commands have no GUI caller.
   Roll Back uses the existing previous deployment and completes its gate after
   live success, without restarting.
 - Homebrew uninstall/pin actions confirm intent and retain typed target
@@ -151,9 +153,16 @@ Provider-specific safety remains with each live owner:
   self-reported derived argv where available; markers are an audit aid, not proof.
 
 Livery uses an embedded, theme-adaptive foundation `GtkFlowBox` with one
-activation signal. The shared catalog chooser fetches only its visible page of
+activation signal. It stays in `SelectionNone` mode, because single selection
+follows the keyboard cursor and would highlight marks never applied; the
+confirmed panel selection is drawn as a badge plus the accessible selected
+state (`pageview.LiveryFoundationTiles`) whenever `liveryState.PanelID` is
+confirmed, including the load-time restore, which writes nothing. The shared
+catalog chooser fetches only its visible page of
 at most twelve search matches plus Custom SVG; new searches cancel old fetches
-and generation checks discard stale artwork. Rotation scheduling serializes
+and generation checks discard stale artwork. Its search field consumes Escape
+as `stop-search`, so that handler clears a typed query and otherwise closes the
+chooser (`pageview.LiveryChooserEscapeCloses`). Rotation scheduling serializes
 systemd changes and retains confirmed preferences when a unit change fails.
 
 All external work runs off GTK; widget updates return through

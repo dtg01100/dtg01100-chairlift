@@ -224,46 +224,6 @@ func TestFactoryResetLiveToastAsksForARestart(t *testing.T) {
 	}
 }
 
-func TestPinBuildNeverConfirmsUnderDryRun(t *testing.T) {
-	decision := PinBuild(true, "20260920")
-	if decision.Confirm {
-		t.Error("PinBuild(true).Confirm = true, want false")
-	}
-	if !strings.Contains(decision.Toast, "[DRY-RUN]") || !strings.Contains(decision.Toast, "20260920") {
-		t.Errorf("PinBuild(true).Toast = %q, want dry-run preview with day", decision.Toast)
-	}
-}
-
-func TestPinBuildLiveToastAsksForARestart(t *testing.T) {
-	decision := PinBuild(false, "20260920")
-	if !decision.Confirm {
-		t.Error("PinBuild(false).Confirm = false, want true")
-	}
-	if !strings.Contains(decision.Toast, "Restart") {
-		t.Errorf("PinBuild(false).Toast = %q, want restart request", decision.Toast)
-	}
-}
-
-func TestReturnToStreamNeverConfirmsUnderDryRun(t *testing.T) {
-	decision := ReturnToStream(true)
-	if decision.Confirm {
-		t.Error("ReturnToStream(true).Confirm = true, want false")
-	}
-	if !strings.Contains(decision.Toast, "[DRY-RUN]") {
-		t.Errorf("ReturnToStream(true).Toast = %q, want dry-run preview", decision.Toast)
-	}
-}
-
-func TestReturnToStreamLiveToastAsksForARestart(t *testing.T) {
-	decision := ReturnToStream(false)
-	if !decision.Confirm {
-		t.Error("ReturnToStream(false).Confirm = false, want true")
-	}
-	if !strings.Contains(decision.Toast, "Restart") {
-		t.Errorf("ReturnToStream(false).Toast = %q, want restart request", decision.Toast)
-	}
-}
-
 func TestPowerwashConfirmsOnlyWhenSomethingWasRemoved(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -273,7 +233,9 @@ func TestPowerwashConfirmsOnlyWhenSomethingWasRemoved(t *testing.T) {
 		wantConfirm bool
 		wantToast   string
 	}{
-		{name: "dry run", dryRun: true, wantToast: "[DRY-RUN]"},
+		{name: "dry run", dryRun: true, succeeded: 2, wantToast: "[DRY-RUN] Preview: would remove"},
+		{name: "dry run with nothing installed", dryRun: true, wantToast: "[DRY-RUN] Preview: nothing is installed to remove"},
+		{name: "dry run with an unreadable inventory", dryRun: true, succeeded: 1, failed: 1, wantToast: "[DRY-RUN] Preview: could not read"},
 		{name: "both succeeded", succeeded: 2, wantConfirm: true, wantToast: "Removed"},
 		{name: "nothing installed", wantConfirm: true, wantToast: "nothing to remove"},
 		{name: "one failed, one succeeded", succeeded: 1, failed: 1, wantConfirm: true, wantToast: "couldn't be removed"},

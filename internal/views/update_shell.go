@@ -234,7 +234,35 @@ func (s *UpdateShell) StartCheck() {
 	go func() {
 		defer cancel()
 		s.coordinator.Check(ctx, preferences, policy, s.publish)
+		// Queued after the check's last publish, so it sees that snapshot.
+		sgtk.RunOnMainThread(s.checkFinished)
 	}()
+}
+
+// checkFinished runs on the GTK main thread once a check returns. The check
+// captured the preferences it started from; one changed while it ran left
+// the rows describing the old ones (W3-15).
+func (s *UpdateShell) checkFinished() {
+	if s == nil || s.closed.Load() {
+		return
+	}
+	if updatepresent.RecheckAfterCheck(s.snapshot, s.currentPreferences()) {
+		s.StartCheck()
+	}
+}
+
+// PreferencesChanged runs on the GTK main thread when an update-source
+// preference changes, and starts a check when the snapshot on screen no
+// longer matches the preferences. The coordinator stays the only owner of
+// source enablement: the shell never flips a row itself. A mutation in
+// flight refuses the check; finishMutation calls this again once it ends.
+func (s *UpdateShell) PreferencesChanged() {
+	if s == nil || s.closed.Load() {
+		return
+	}
+	if updatepresent.RecheckForPreferences(s.snapshot, s.currentPreferences()) {
+		s.StartCheck()
+	}
 }
 
 // StartUpdate starts the current snapshot's serial mutation away from the GTK
@@ -261,6 +289,16 @@ func (s *UpdateShell) StartUpdate() {
 			s.publish(snapshot)
 		})
 		s.notifyUpdateComplete(final)
+		if final.Preview {
+			// A preview installs nothing and the panel returns to "Updates
+			// available"; say it was a preview, as every other dry-run action
+			// on the page does.
+			sgtk.RunOnMainThread(func() {
+				if s.toasts != nil && updatepresent.ShouldPublish(s.closed.Load()) {
+					s.toasts.ShowToast(actionmsg.UpdateAllPreview)
+				}
+			})
+		}
 		if s.onUpdateFinished != nil {
 			sgtk.RunOnMainThread(func() {
 				if s.onUpdateFinished != nil {
@@ -272,7 +310,8 @@ func (s *UpdateShell) StartUpdate() {
 }
 
 // beginMutation is the common admission point for unified, individual and
-// dedicated staging actions. Every caller runs on GTK's main thread.
+// dedicated staging actions, and for the channel and driver switches that
+// replace the operating system. Every caller runs on GTK's main thread.
 func (s *UpdateShell) beginMutation() bool {
 	if s == nil {
 		return false
@@ -314,6 +353,9 @@ func (s *UpdateShell) finishMutation() {
 			row.setRestartButtonSensitive(false)
 		}
 	}
+	// A preference changed while the run held admission left the rows
+	// describing the run's preferences, not the current ones.
+	s.PreferencesChanged()
 }
 
 func (s *UpdateShell) startItemUpdate(source updateflow.SourceID, item updateflow.Item, row *adw.ActionRow) {
@@ -488,17 +530,11 @@ func (s *UpdateShell) notifyUpdateComplete(final updateflow.Snapshot) {
 		return
 	}
 
-	skipped := 0
-	for _, source := range final.Sources {
-		if !source.Enabled || !source.Configured || !source.Available {
-			skipped++
-		}
-	}
 	notification := notify.UpdateAllComplete(
 		len(final.CompletedSources),
 		len(final.FailedSources),
-		skipped,
 		final.RestartRequired(),
+		final.MaintenanceErr != nil,
 	)
 
 	sgtk.RunOnMainThread(func() {

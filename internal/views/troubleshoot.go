@@ -14,6 +14,7 @@ import (
 	"github.com/projectbluefin/chairlift/internal/devmenu"
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/troubleshoot"
+	"github.com/projectbluefin/chairlift/internal/views/actionmsg"
 	"github.com/projectbluefin/chairlift/internal/views/pageview"
 )
 
@@ -173,6 +174,11 @@ func (uh *UserHome) setUpGoose() {
 		state, facts, _ := agentmode.ObserveLive(ctx)
 		sgtk.RunOnMainThread(func() {
 			uh.finishGooseAction(state, facts)
+			if !dryrun.Enabled() {
+				// Setup installs Homebrew packages Apps lists, and can
+				// stop partway, so the inventory is re-read on any outcome.
+				uh.homebrewInventoryChanged()
+			}
 			if err != nil {
 				log.Printf("views: goose setup failed: %v", err)
 				uh.toastAdder.ShowErrorToast("Couldn't set up Goose. Check your internet connection.")
@@ -191,7 +197,9 @@ func (uh *UserHome) setUpGoose() {
 
 // launchGoose re-reads readiness, then launches through agentmode.Launch,
 // which writes ChairLift's Goose profile before a fresh session and hands a
-// launch to the session already open. Both run off the main thread.
+// launch to the session already open. Both run off the main thread, and the
+// row stays busy until a fresh session holds its profile (agentmode.Launch's
+// bounded startup wait), so a second click cannot race the first.
 func (uh *UserHome) launchGoose() {
 	if uh.gooseLaunchBtn == nil || !uh.gooseGate.TryStart() {
 		return
@@ -206,8 +214,9 @@ func (uh *UserHome) launchGoose() {
 		defer cancel()
 		state, facts, _ := agentmode.ObserveLive(ctx)
 		var launchErr error
+		var result agentmode.LaunchResult
 		if state.Ready() {
-			launchErr = agentmode.Launch(ctx, facts, func(asyncErr error) {
+			result, launchErr = agentmode.Launch(ctx, facts, func(asyncErr error) {
 				sgtk.RunOnMainThread(func() {
 					log.Printf("views: goose desktop exited with error: %v", asyncErr)
 					uh.toastAdder.ShowErrorToast("Goose closed unexpectedly.")
@@ -225,6 +234,10 @@ func (uh *UserHome) launchGoose() {
 				uh.toastAdder.ShowErrorToast("Couldn't open Goose. Try again.")
 			case dryRun:
 				uh.toastAdder.ShowToast("[DRY-RUN] Would launch Goose Desktop")
+			default:
+				message := pageview.GooseLaunchToast(result)
+				log.Printf("views: goose desktop launch: %s", message)
+				uh.toastAdder.ShowToast(message)
 			}
 		})
 	}()
@@ -243,15 +256,25 @@ func (uh *UserHome) onAskBluefinMenuToggled(enabled bool, toggle *guardedSwitch)
 		defer cancel()
 		err := devmenu.SetAskBluefinVisible(ctx, enabled)
 		_, visible, readErr := devmenu.AskBluefinState(ctx)
+		decision := actionmsg.AskBluefinMenu(dryrun.Enabled(), enabled, visible, err, readErr)
 		sgtk.RunOnMainThread(func() {
 			uh.askBluefinGate.Reset()
 			toggle.widget.SetSensitive(true)
-			if readErr == nil {
-				toggle.set(visible)
-			}
+			// set() on every path: the switch handler held its state,
+			// so skipping it would leave the switch half-flipped.
+			toggle.set(decision.Active)
 			if err != nil {
 				log.Printf("views: setting ask bluefin menu visibility failed: %v", err)
-				uh.toastAdder.ShowErrorToast("Couldn't change the Ask Bluefin menu. Try again.")
+			}
+			if readErr != nil {
+				log.Printf("views: reading ask bluefin menu visibility failed: %v", readErr)
+			}
+			switch {
+			case decision.Toast == "":
+			case decision.Error:
+				uh.toastAdder.ShowErrorToast(decision.Toast)
+			default:
+				uh.toastAdder.ShowToast(decision.Toast)
 			}
 		})
 	}()

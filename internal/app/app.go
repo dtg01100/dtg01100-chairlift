@@ -172,9 +172,11 @@ func (a *Application) onCommandLine(cl *gio.ApplicationCommandLine) int32 {
 			decision := agentmode.Dispatch(facts)
 			// Launch is plain exec and profile write, so it runs here; only
 			// GTK work goes to the main thread. Its context only gates the
-			// start, and the probe's context is already spent.
+			// start and Launch's own bounded startup wait, so a Goose that
+			// dies while starting opens Agents with the failure; the probe's
+			// context is already spent.
 			if decision.Action == agentmode.DispatchLaunch {
-				launchErr := agentmode.Launch(context.Background(), facts, func(asyncErr error) {
+				_, launchErr := agentmode.Launch(context.Background(), facts, func(asyncErr error) {
 					log.Printf("app: goose desktop exited with error: %v", asyncErr)
 				})
 				if launchErr == nil {
@@ -300,9 +302,17 @@ func (a *Application) onActivate() {
 // application by default, so without this the accelerator
 // setupKeyboardShortcuts installs resolves to nothing and Ctrl+Q is
 // advertised in the shortcuts dialog while doing nothing.
+//
+// g_application_quit never emits close-request, so a bare Quit skipped the
+// update-in-progress guard and Ctrl+Q killed a running update mid-flight.
+// The action asks the window's shared guard first; when no update runs it
+// quits in one press, setup included.
 func (a *Application) registerQuitAction() {
 	quitAction := gio.NewSimpleAction("quit", nil)
 	quitActivateCb := func(action gio.SimpleAction, param uintptr) {
+		if a.window != nil && a.window.RefuseCloseWhileUpdating() {
+			return
+		}
 		a.Quit()
 	}
 	quitAction.ConnectActivate(&quitActivateCb)

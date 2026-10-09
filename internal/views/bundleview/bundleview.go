@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/projectbluefin/chairlift/internal/homebrew"
 )
 
 const (
@@ -233,9 +235,38 @@ func (g *InstallGate) Reset() {
 	g.state.CompareAndSwap(gateRunning, gateIdle)
 }
 
-// Complete permanently closes a successfully installed collection action.
+// Complete closes a successfully installed collection action. Only an
+// observation that the collection is no longer installed reopens it.
 func (g *InstallGate) Complete() {
 	g.state.CompareAndSwap(gateRunning, gateComplete)
+}
+
+// Observe applies an observed installed state to an action that is not
+// running: installed closes an idle action as Installed, and not installed
+// reopens a closed one, so the row shows what the system holds rather than
+// only what this session did. A running install is never touched; its own
+// outcome decides the row. It reports whether the state changed.
+func (g *InstallGate) Observe(installed bool) bool {
+	if installed {
+		return g.state.CompareAndSwap(gateIdle, gateComplete)
+	}
+	return g.state.CompareAndSwap(gateComplete, gateIdle)
+}
+
+// ObservedInstalled maps a `brew bundle check` status onto a collection's
+// installed state. known is false when the check could not decide, which
+// must leave the row as it was. Update Available counts as installed: every
+// item is present, and upgrading them is the Updates page's job, not a
+// reason to offer the collection again.
+func ObservedInstalled(status homebrew.BundleStatus) (installed, known bool) {
+	switch status {
+	case homebrew.BundleInstalled, homebrew.BundleUpdateAvailable:
+		return true, true
+	case homebrew.BundleNotInstalled:
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 // Running reports whether an install is in progress behind the gate.
@@ -254,6 +285,14 @@ const (
 	InstallLabelRunning   = "Installing…"
 	InstallLabelCompleted = "Installed"
 )
+
+// InstallButtonName is the accessible name of a collection's button: its
+// label, without a progress ellipsis, followed by the collection's title, so
+// a screen reader announces "Install Team tools" rather than an "Install"
+// every row shares.
+func InstallButtonName(label, title string) string {
+	return strings.TrimSuffix(label, "…") + " " + title
+}
 
 // InstallPhase is the label and sensitivity every button bound to a
 // collection shows for the gate's current state. A button connected while a

@@ -68,7 +68,9 @@ exists but the host is not bootc-booted.
 
 The coordinator owns `Snapshot.TotalUpdates`, source inventories and restart
 state. Generations reject stale publications. A failed check preserves the
-previous items and restart observation; a preview leaves inventory unchanged.
+previous items and restart observation; a preview leaves inventory unchanged,
+and the shell answers a preview Update all with `actionmsg.UpdateAllPreview`
+instead of the completion notification.
 An apply with `Changed=false` and no preview preserves pending items and sets
 a retryable apply failure, not completion. Retry applies only failed sources;
 maintenance can be retried separately. `PhaseRestartRequired` has
@@ -183,7 +185,15 @@ on failure or dry-run, and refresh the installed inventory only after live
 success. The installed loader clears and repopulates separate
 `formulaeRows`/`caskRows` trackers under its refresh generation; a stale
 generation's result is dropped and a failed read preserves the last known rows.
+Row gates come from each list's `actionstate.RowGates`: while any row's
+action is running (including an open confirmation dialog), a rebuild of that
+list is deferred rather than replacing the controls that show the action, and
+`settleHomebrewRows` runs the owed reload once every gate is released.
 Export restores its gate and spinner after every outcome.
+Homebrew installs started elsewhere — Goose Set Up, enabling Agent Mode,
+Features' developer tools, and collection installs, including one that
+stopped partway — call `homebrewInventoryChanged` on the main thread, which
+reloads the installed lists and re-observes every collection's status.
 
 ### Process and diagnostic contract
 
@@ -196,7 +206,10 @@ failures and discard successful output.
 
 Deadline and cancellation classify distinctly and unwrap to their context
 sentinels. Missing executables return `*NotFoundError`. Nonzero exits return
-`*Error` or `*UntrustedTapError`. For mutations, stdout and stderr tails are
+`*Error`, `*UntrustedTapError`, or, for `uninstall` argv only, a
+`*DependentsError` naming the installed packages Homebrew's stderr refusal
+says still need the package (closed name grammar; Apps names them in its
+error toast through `actionmsg.UninstallFailure`). For mutations, stdout and stderr tails are
 joined stdout-first, logged, and distilled by
 [`diagnostic.go`](../../internal/homebrew/diagnostic.go) to one bounded error
 line for UI feedback. Bundle installers replay their real failure on stdout,
@@ -232,7 +245,9 @@ showing raw paths in the UI.
 `BundleCheck` reports Installed on first-pass success. Only an ordinary exit 1
 permits `check --no-upgrade`: success then means Update Available, exit 1 means
 Not Installed. Malformed manifests, cancellation, timeouts and other failures
-remain Indeterminate with an error; dry-run still performs these reads.
+remain Indeterminate with an error; dry-run still performs these reads. Read-only
+`bundle check`/`bundle list` run with `HOMEBREW_NO_AUTO_UPDATE=1`, because brew
+otherwise runs `brew update --auto-update` before every `bundle` subcommand.
 
 `applications_page.brew_bundles_group` is independent of `brew_group`.
 Built-in `bundles_paths` contains `/usr/share/ublue-os/homebrew`,
@@ -240,9 +255,19 @@ Built-in `bundles_paths` contains `/usr/share/ublue-os/homebrew`,
 [`config.yml`](../../config.yml) replaces that list with the first directory
 only. Group visibility is floored on Homebrew before discovery.
 A per-path `bundleview.InstallGate` prevents overlapping collection installs.
-Live success permanently completes that row and refreshes installed packages;
-failure or preview restores Install, and preview requests no inventory refresh.
+Live success completes that row and refreshes installed packages; failure or
+preview restores Install, and preview requests no inventory refresh.
 Inline install progress pulses rather than inventing a percentage.
+Each row's installed state is observed, not remembered:
+`refreshBundleStatuses` (`internal/views/bundle_install.go`) runs
+`BundleCheck` for every collection off the GTK thread once the rows are
+built, again after every live collection install (success or failure), and
+after a live Homebrew uninstall. `bundleview.ObservedInstalled` maps Installed
+and Update Available to installed, Not Installed to not installed, and
+Indeterminate to no change; `InstallGate.Observe` then closes an idle row as
+Installed or reopens an Installed one, and never touches a running install.
+An `actionstate.RefreshGate` generation lets only the newest refresh publish,
+so a check begun before an install cannot overwrite its outcome.
 
 ### Tap trust
 
@@ -359,7 +384,10 @@ are capped, and `rowset.Tracker.TrimTo` caps the rendered window at
 `progresslog.DefaultLimit` (200). `StagingLogSubtitle(shown, total)` discloses
 omitted lines. Both callback and widget caps are required; do not copy a
 per-event GTK callback example into a stream consumer. Command-output rows
-keep markup disabled.
+keep markup disabled. The Details expander is built hidden and revealed by
+the first flushed line: a stage helper may print nothing to the pipe (on
+Dakota, `bootc upgrade` logged its progress to the journal), and an
+expander that opens to nothing reads as lost output.
 
 ## bootc (`internal/bootc/`)
 
@@ -447,6 +475,10 @@ dispatcher. Enable, disable and update all accept a final `--dry-run`, which
 sets the library options' DryRun field. The GUI's preview normally suppresses
 pkexec entirely; helper-level preview is defense in depth and the installed
 accepted-command test surface. Successful helper results are JSON on stdout.
+A failed `update` writes one stderr line from
+`updexhelper.UpdateFailureDetail`: updex's generic error followed by every
+failed `feature/component: reason`, because updex records those only in its
+results and the helper's client has no warning reporter.
 
 [`featurestatus`](../../internal/views/featurestatus/featurestatus.go) owns
 the Features-page aggregation: **any** component update makes its feature
@@ -477,6 +509,13 @@ is the complete fourteen-command surface:
 The helper dispatcher rejects unhandled commands; parser acceptance alone is
 not evidence a command executes.
 
+`ubluehelper.Timeout` is the helper's per-command budget: 30 minutes for the
+image-pulling `channel-switch`, `driver-switch`, `pin`, and `unpin` (the same
+as OS staging's `bootc.DefaultTimeout`), 10 minutes for everything else. The
+GUI's `ublue.ImageSwitchContext` and `ublue.DefaultContext` add a five-minute
+`AuthenticationAllowance`, because the caller's clock also runs during the
+PolicyKit prompt and the helper must be the one to report its outcome.
+
 Only validated channel, driver or day words cross this boundary. The helper
 resolves concrete image references from its own descriptor and the
 [`internal/imageinfo`](../../internal/imageinfo/) channel/driver tables,
@@ -484,7 +523,8 @@ loaded from root-owned system paths. It resolves the account from `PKEXEC_UID`.
 No image reference, username, unit name, reset/rollback target or scheduling
 value arrives in argv. Channel/driver switches enforce container signature
 policy. Rollback has one existing-deployment target; Factory Reset spells the
-fixed `bootc install reset --experimental --apply` argv in the helper.
+fixed `bootc install reset --experimental` argv in the helper (no `--apply`,
+which reboots immediately; the reset applies at the next restart).
 Reset and restart confirmations stay in the calling UI, with destructive
 wording supplied by `pageview`.
 
@@ -528,7 +568,7 @@ record intent separately, without these helper outcome/derived-argv records.
 Ordinary Homebrew, Flatpak and user-service commands do not flow through the
 fixed-helper journal choke point.
 
-### Dated-build registry catalog and pinning
+### Dated-build registry reads and the helper's pin commands
 
 [`internal/registrytags`](../../internal/registrytags/registrytags.go) is
 read-only: `Client.Tags` follows validated same-host `Link: rel="next"`
@@ -538,33 +578,20 @@ response Content-Type determines manifest shape. A 404 returns
 `ErrUnknownTag`; an absent creation annotation is not a transport failure.
 `ParseBuild` recognizes real days ending a stream with `.` or `-`;
 `Builds(tags, since)` keeps aliases and sorts newest day first, then tag.
+Every request uses the injectable `Client.HTTP`; tests use loopback
+registries. In the GUI, only composefs `bootc.CheckUpdate` reads the registry
+(see above).
 
-[`Catalog`](../../internal/registrytags/catalog.go) caches listings and tag
-resolutions in process with a fifteen-minute default TTL and a 256-entry
-bound **per cache map**. It is safe for concurrent readers, never persists to
-disk, never caches a failed read and never serves an expired answer as a
-failure fallback. Every request uses the injectable `Client.HTTP`; tests use
-loopback registries.
+**The published-versions calendar is withdrawn (#522).** Powerwash used to
+list the running stream's dated builds (Published versions, with a confirmed
+per-day **Pin**) and offer **Return to stream** when booted on a dated tag.
+The dated tags exist only for the deprecated `latest` stream, so Powerwash now
+offers Roll Back and the reset group only. The view code, its in-process
+`Catalog` cache, the `ublue.Pin`/`ublue.Unpin` wrappers and the shared
+pin/unpin switch gate were removed; Roll Back keeps its own one-shot gate.
 
-Powerwash's [`versions.go`](../../internal/views/versions.go) reads the catalog
-only when Check is pressed. `pageview.PublishedVersions` selects the running
-stream and one row per day. A failed read removes the previous list rather
-than leaving it displayed as current. Each row offers a confirmed **Pin**
-action that calls `ublue.Pin(ctx, day)` with a day word, never the listed image
-reference. Missing installed pin support keeps that action insensitive with
-an explanation; the currently booted day reads Pinned. Shared `buttonRoute`
-and `dialogRoute` callbacks survive repeated list refreshes.
-
-[`recovery.go`](../../internal/views/recovery.go) offers **Go back to regular updates**
-only when the descriptor's running tag parses as a dated build. Its confirmed
-action calls `ublue.Unpin(ctx)` and requires installed unpin support. Both
-controls reset their action gates after completion, refresh rollback status
-and request a shared update check only after live success. Preview restores
-the controls and does not claim a deployment was staged. The catalog remains
-read-only; these separate actions use the validated helper boundary below.
-
-`ublue.Pin(ctx, day)` validates `YYYYMMDD` before dispatch; the helper validates
-it again. `pin <YYYYMMDD> [--dry-run]` accepts a real day no later than today
+The privileged half stays, with no GUI caller. The helper validates the day
+itself: `pin <YYYYMMDD> [--dry-run]` accepts a real day no later than today
 UTC; `unpin [--dry-run]` accepts no target. In
 [`ubluehelper.PinArgs`](../../internal/ubluehelper/pin.go), the booted tag
 supplies the stream, which must pass `imageinfo.KnownStream`. Live pin tries
@@ -594,7 +621,10 @@ administrator script or container removal.
 
 The coordinator runs optional post-update maintenance only after live completed
 source work with no failed/pending updates and with the user's
-`MaintenanceAfterUpdates` preference enabled. Manual cleanup presents every
+`MaintenanceAfterUpdates` preference enabled. While it runs, `Snapshot.Maintaining`
+keeps the phase `PhaseUpdating` with no action, so the panel shows the cleanup
+step and the progress bar instead of "System is up to date" before cleanup
+(which may prompt for a password) has finished. Manual cleanup presents every
 step through `cleanupview`; reclaimed bytes require two successful readings
 and the minimum reportable difference. Preview never reports measured savings.
 Cleanup wrapper calls have their own budgets, so the enclosing context is
@@ -618,7 +648,14 @@ surface is not permission to make the fixed provider helpers configurable.
 Homebrew editor installs, WSL backends and Docker CLI setup under
 `features_page.dx_group`. The developer-access switch does not install every
 editor or switch to a different OS image. `Tools()` is the current typed
-inventory; architecture support is checked per tool.
+inventory, including each tool's one-line description; architecture support
+is checked per tool. Row text and the Install button's per-tool accessible
+name come from `pageview.DeveloperTool`. The Developer group re-reads only the
+tools' installed state each time it is shown (one `map` handler connected at
+build), so an uninstall on Apps or in a terminal is reflected without a
+restart. That passive read stands aside while `developerGate` is held, and
+every gated action that publishes tool state begins a new
+`developerToolRefresh` generation, so an older read never overwrites it.
 
 `dx_group.wsl_backend` defaults to **nsl**, with **Lima** as an administrator
 option and an in-session backend chooser. The first observation retains an
@@ -769,12 +806,23 @@ button into Set Up; the Launch button rechecks readiness on each click.
 [`agentmode.Launch`](../../internal/agentmode/launch.go) writes the profile,
 then runs `llmman launch goose-desktop --model bluefin-active` with
 `GOOSE_PATH_ROOT` and `XDG_CONFIG_HOME` inside it, through `launcher.Run`.
-Launch lifetime is detached from the short preflight context; asynchronous
-failures return through the GTK thread. When Goose is already running in the
+Both Goose launches write their stdout and stderr to ChairLift's own stderr,
+so a Goose that fails to start (#544) leaves its reason in the same journal
+stream as ChairLift's log rather than in `/dev/null`.
+Launch lifetime is detached from the short preflight context. A fresh launch
+keeps the Goose row busy until the session holds the profile's
+single-instance lock, the process exits, or 15 seconds pass, so a second
+click cannot start a second `llmman launch` that llmman would refuse; a
+non-zero exit during that wait is the launch's error, and later failures
+return through the GTK thread. When Goose is already running in the
 profile, Launch starts `goose-desktop` there directly instead; Goose's
 single-instance lock hands the request to the running session, so no second
 Goose starts. GNOME may show a "Goose is ready" notification rather than
-raise the window, since no activation token is passed.
+raise the window, since no activation token is passed. Launch reports which
+of these happened (`agentmode.LaunchResult`), and the row's toast
+(`pageview.GooseLaunchToast`) says "started", "still starting", or "already
+running" rather than claiming a window opened: a Goose that cannot draw still
+holds the profile, and every later click is handed to it.
 
 `chairlift --ask-bluefin` uses the same pure
 [`dispatcher`](../../internal/agentmode/dispatcher.go): launch when ready,
@@ -784,14 +832,19 @@ application requests share that dispatcher.
 tuple's visibility — recognizing the web link, `chairlift --ask-bluefin`,
 and the distro's `/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper
 --ask-bluefin` — using the user-layer override/reset rule; it never rewrites
-the command and does not run a privileged action.
+the command and does not run a privileged action. Because the extension
+renders only slots listed in `command-order`, the entry counts as shown only
+when its slot is listed there too, and showing it appends a missing slot.
 
 The same Agents page's **Contribute to Bluefin** action uses
 [`internal/contribute`](../../internal/contribute/contribute.go) to check
 `xdg-terminal-exec`, `ujust`, the `contribute` recipe, Podman and an existing
-Hive registration file. Readiness launches `xdg-terminal-exec ujust contribute`
-through the async launcher; a missing prerequisite leaves an explained,
-insensitive action. Registration is not created or validated with Hive here,
+Hive registration file, again each time the group is shown so a requirement
+fixed outside ChairLift is picked up without a restart. Readiness launches
+`xdg-terminal-exec ujust contribute` through the async launcher; a missing
+prerequisite leaves an explained,
+insensitive action, and missing registration adds a **Registration Guide**
+button that opens the contributor configuration documentation. Registration is not created or validated with Hive here,
 and dry-run launches nothing.
 
 ## Printer applications (`internal/printerapp`)

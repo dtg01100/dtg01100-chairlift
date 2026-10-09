@@ -2,7 +2,6 @@ package views
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"path"
@@ -14,7 +13,6 @@ import (
 	"github.com/projectbluefin/chairlift/internal/homebrew"
 	"github.com/projectbluefin/chairlift/internal/journal"
 	"github.com/projectbluefin/chairlift/internal/maintenanceexec"
-	"github.com/projectbluefin/chairlift/internal/pkexec"
 	"github.com/projectbluefin/chairlift/internal/updateproviders"
 	"github.com/projectbluefin/chairlift/internal/views/actionmsg"
 	"github.com/projectbluefin/chairlift/internal/views/actionstate"
@@ -56,13 +54,16 @@ func (uh *UserHome) buildMaintenancePage() {
 		uh.buildConfiguredTasksGroup(page)
 	}
 
-	// Powerwash detail entry. The detail view houses rollback and reset.
+	// Powerwash detail entry. The detail view houses rollback and reset. Its
+	// subtitle names only what the detail built, so it is written by
+	// refreshRecoveryEntry once buildRecoveryPage has run, and again when the
+	// asynchronous rollback check settles.
 	if uh.recoveryProvidersAvailable() {
 		recoveryGroup := adw.NewPreferencesGroup()
 		recoveryGroup.SetTitle("Powerwash")
 		recoveryRow := adw.NewActionRow()
 		recoveryRow.SetTitle("Powerwash")
-		recoveryRow.SetSubtitle(pageview.RecoveryEntrySubtitle())
+		uh.recoveryEntryRow = recoveryRow
 		recoveryRow.SetActivatable(true)
 		icon := gtk.NewImageFromIconName("pan-end-symbolic")
 		recoveryRow.AddSuffix(&icon.Widget)
@@ -288,12 +289,12 @@ func (uh *UserHome) runMaintenanceAction(title, script string, sudo bool, button
 			button.SetLabel(cleanupview.ScriptsButtonLabel)
 
 			if err != nil {
-				log.Printf("Maintenance task %q failed: %v", title, err)
-				message := fmt.Sprintf("Couldn't finish %s. Try again.", title)
-				if sudo {
-					message = pkexec.UserMessage(err, message)
+				text, isError := actionmsg.MaintenanceScriptFailure(title, sudo, err)
+				if isError {
+					uh.toastAdder.ShowErrorToast(text)
+				} else {
+					uh.toastAdder.ShowToast(text)
 				}
-				uh.toastAdder.ShowErrorToast(message)
 				return
 			}
 

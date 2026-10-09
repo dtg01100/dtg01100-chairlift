@@ -53,6 +53,8 @@ func TestPreflightOutcomes(t *testing.T) {
 		mutateProber func(p *Prober)
 		wantStatus   Status
 		wantReady    bool
+		wantSub      string
+		wantHelp     string
 	}{
 		{
 			name:         "ready when all preflight requirements are met",
@@ -131,6 +133,8 @@ func TestPreflightOutcomes(t *testing.T) {
 			},
 			wantStatus: StatusMissingRegistration,
 			wantReady:  false,
+			wantSub:    "Register this machine with Hive first.",
+			wantHelp:   RegistrationURL,
 		},
 		{
 			name: "registration path is a directory",
@@ -141,6 +145,8 @@ func TestPreflightOutcomes(t *testing.T) {
 			},
 			wantStatus: StatusMissingRegistration,
 			wantReady:  false,
+			wantSub:    "Register this machine with Hive first.",
+			wantHelp:   RegistrationURL,
 		},
 	}
 
@@ -162,6 +168,14 @@ func TestPreflightOutcomes(t *testing.T) {
 				if strings.Contains(got.Subtitle, jargon) {
 					t.Errorf("Preflight subtitle %q names %q", got.Subtitle, jargon)
 				}
+			}
+			// A URL is offered as a link control, never as unclickable
+			// subtitle text.
+			if got.HelpURL != tt.wantHelp {
+				t.Errorf("Preflight help URL = %q, want %q", got.HelpURL, tt.wantHelp)
+			}
+			if strings.Contains(got.Subtitle, "://") {
+				t.Errorf("Preflight subtitle %q spells out a URL", got.Subtitle)
 			}
 		})
 	}

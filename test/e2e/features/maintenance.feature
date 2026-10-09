@@ -54,10 +54,12 @@ Feature: Maintenance and its Powerwash detail
   Scenario: Powerwash is a detail of Maintenance and Back returns there
     Given ChairLift is running
     When I open the "Maintenance" page
-    And I open the Powerwash detail
+    Then the "Powerwash" row says "Roll back to the previous system version or reset this machine."
+    When I open the Powerwash detail
     Then the Powerwash detail is shown
     And I see "Go back to the previous version"
     And I see "Reset this computer"
+    And I do not see "Powerwash and Factory Reset are turned off"
     When I go back from the Powerwash detail
     Then the "Maintenance" page is shown
     And I see "Free up space"
@@ -94,7 +96,7 @@ Feature: Maintenance and its Powerwash detail
     And the stubbed "distrobox" never ran "rm"
     And the action journal is empty
 
-  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools
+  @stub.maintenance_bootc_rollback @stub.maintenance_powerwash_inventory
   Scenario: Confirming Powerwash previews both removals, claims nothing, and can run again
     Given ChairLift is running
     When I open the "Maintenance" page
@@ -113,6 +115,24 @@ Feature: Maintenance and its Powerwash detail
     And the action journal is empty
     When I click the "Remove…" button in the "Remove Flatpak apps and containers" row
     Then a dialog titled "Remove Flatpak Apps and Containers?" is shown
+
+  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools
+  Scenario: Powerwash on an account that holds nothing previews no removal
+    Given ChairLift is running
+    When I open the "Maintenance" page
+    And I open the Powerwash detail
+    And I click the "Remove…" button in the "Remove Flatpak apps and containers" row
+    And I choose "Remove Apps and Containers" in the dialog
+    Then I see "[DRY-RUN] Preview: nothing is installed to remove — no changes made"
+    And no dialog is shown
+    And the application log contains "views: powerwash finished succeeded=0 failed=0 skipped=2"
+    And the application log does not contain "Would execute: flatpak uninstall"
+    And the application log does not contain "would execute: distrobox"
+    And the stubbed "flatpak" never ran "uninstall"
+    And the stubbed "distrobox" never ran "rm"
+    And I do not see "would remove your Flatpaks and Distrobox containers"
+    And the "Remove…" button in the "Remove Flatpak apps and containers" row is sensitive
+    And the action journal is empty
 
   # --------------------------------------------------------- Factory Reset
 
@@ -171,77 +191,10 @@ Feature: Maintenance and its Powerwash detail
     Given ChairLift is running
     When I open the "Maintenance" page
     And I open the Powerwash detail
-    Then I see "Published versions"
+    Then I do not see "Published versions"
     And I see "Reset this computer"
     And I do not see "Go back to the previous version"
     And the "Roll Back" button is not shown
-
-  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools @stub.maintenance_registry_unreachable
-  Scenario: An unreachable registry lists no published versions and the check can be retried
-    Given ChairLift is running
-    When I open the "Maintenance" page
-    And I open the Powerwash detail
-    And I click the "Check" button in the "Published versions" row
-    Then I see "Couldn't check for versions. Check your internet connection."
-    And the application log contains "published versions: "
-    And the "Published versions" row says "See which versions came out in the last 90 days."
-    And the "Check Again" button in the "Published versions" row is sensitive
-    And I do not see "released in the last 90 days"
-    And the action journal is empty
-
-  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools @stub.maintenance_published_versions
-  Scenario: Cancelling pin to a published version leaves the build unpinned and controls available
-    Given ChairLift is running
-    When I open the "Maintenance" page
-    And I open the Powerwash detail
-    And I click the "Check" button in the "Published versions" row
-    Then the "Check Again" button is shown
-    When I click the "Pin" button in the "13 September 2026" row
-    Then a dialog titled "Pin the 13 September 2026 Version?" is shown
-    And the dialog says "Updates stop at this version until you go back to regular updates. It takes effect the next time you restart."
-    When I choose "Cancel" in the dialog
-    Then no dialog is shown
-    And the "Pin" button in the "13 September 2026" row is sensitive
-    And the action journal is empty
-
-  @stub.maintenance_bootc_rollback @stub.maintenance_package_tools @stub.maintenance_published_versions
-  Scenario: Confirming pin to a published version journals the pin command and keeps controls usable
-    Given ChairLift is running
-    When I open the "Maintenance" page
-    And I open the Powerwash detail
-    And I click the "Check" button in the "Published versions" row
-    Then the "Check Again" button is shown
-    When I click the "Pin" button in the "13 September 2026" row
-    Then a dialog titled "Pin the 13 September 2026 Version?" is shown
-    When I choose "Pin" in the dialog
-    Then I see "[DRY-RUN] Preview: would pin version 20260913 — no changes made"
-    And no dialog is shown
-    And the action journal records "pin" as dry-run
-    And the journalled command is "pkexec /usr/bin/chairlift-helper pin 20260913 --dry-run"
-    And the "Pin" button in the "13 September 2026" row is sensitive
-
-  @stub.maintenance_bootc_pinned @stub.maintenance_package_tools
-  Scenario: A host booted on a dated tag offers regular updates again and journals unpin
-    Given ChairLift is running
-    When I open the "Maintenance" page
-    And I open the Powerwash detail
-    Then I see "Go back to regular updates"
-    And the "Go back to regular updates" row says "Get the newest version again."
-    When I click the "Resume Updates" button in the "Go back to regular updates" row
-    Then a dialog titled "Go Back to Regular Updates?" is shown
-    And the dialog says "This computer moves to the newest version the next time you restart."
-    When I choose "Cancel" in the dialog
-    Then no dialog is shown
-    And the "Resume Updates" button in the "Go back to regular updates" row is sensitive
-    When I click the "Resume Updates" button in the "Go back to regular updates" row
-    And I choose "Resume Updates" in the dialog
-    Then I see "[DRY-RUN] Preview: would resume regular updates — no changes made"
-    And no dialog is shown
-    And the action journal records "unpin" as dry-run
-    And the journalled command is "pkexec /usr/bin/chairlift-helper unpin --dry-run"
-    And the journalled action carries no argument
-    And the "Resume Updates" button in the "Go back to regular updates" row is sensitive
-
   # ------------------------------------------------ configuration & capability
 
   @config.maintenance-shipped @stub.maintenance_bootc_rollback @stub.maintenance_package_tools
@@ -250,8 +203,12 @@ Feature: Maintenance and its Powerwash detail
     When I open the "Maintenance" page
     Then I see "Free up space"
     And I do not see "Maintenance tasks"
+    And the "Powerwash" row says "Roll back to the previous system version."
+    And I do not see "reset this machine"
     When I open the Powerwash detail
     Then I see "Go back to the previous version"
+    And I see "Powerwash and Factory Reset are turned off in this computer's configuration."
+    And I do not see "Published versions"
     And I do not see "Reset this computer"
     And I do not see "Remove Flatpak apps and containers"
     And the application log does not contain "views: reset group built"

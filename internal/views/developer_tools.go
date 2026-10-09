@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"codeberg.org/puregotk/puregotk/v4/adw"
@@ -31,6 +32,9 @@ type developerOptionRow struct {
 	allowed   bool
 	canEnable bool
 	active    bool
+	// toolView is a tool row's last observed presentation; a dry run
+	// restores it after showing the transient installing state.
+	toolView pageview.DeveloperToolView
 }
 
 func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ublue.Status) {
@@ -94,7 +98,8 @@ func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ub
 	for _, tool := range devtools.Tools() {
 		item := &developerOptionRow{kind: "tool", tool: tool, row: adw.NewActionRow(), spinner: newActivitySpinner(), button: gtk.NewButtonWithLabel("Install")}
 		item.row.SetTitle(tool.Name)
-		item.row.SetSubtitle("Checking…")
+		item.toolView = pageview.DeveloperToolChecking(tool.Name, tool.Description)
+		uh.showDeveloperTool(item, item.toolView)
 		item.button.SetValign(gtk.AlignCenterValue)
 		item.button.SetSensitive(false)
 		item.row.AddSuffix(&item.spinner.Widget)
@@ -104,16 +109,55 @@ func (uh *UserHome) buildDeveloperOptions(group *adw.PreferencesGroup, status ub
 		uh.developerOptions = append(uh.developerOptions, item)
 	}
 	group.Add(&editors.Widget)
+	// Homebrew changes outside this page — an uninstall on Apps, a brew
+	// command in a terminal — would otherwise leave a row reading
+	// "Installed" until restart. Re-read whenever the group is shown; the
+	// handler is connected once, here, for the page's lifetime.
+	uh.developerToolsMapped = func(gtk.Widget) { uh.refreshDeveloperTools() }
+	group.ConnectMap(&uh.developerToolsMapped)
 	// Initial reads share the action gate too; an older load cannot overwrite
 	// a user's mutation or enable overlapping developer actions.
 	uh.developerSwitch.SetSensitive(false)
 	uh.refreshDeveloperOptions(status)
 }
 
+// refreshDeveloperTools re-reads only the optional tools' installed state. It
+// is passive: it stands aside while any developer action holds the gate, and
+// every gated action that publishes tool state begins a new generation, so a
+// read that started before that action can never overwrite its result.
+func (uh *UserHome) refreshDeveloperTools() {
+	if uh.developerGate.Running() || !slices.ContainsFunc(uh.developerOptions, func(item *developerOptionRow) bool { return item.kind == "tool" }) {
+		return
+	}
+	generation := uh.developerToolRefresh.Begin()
+	go func() {
+		formulae, formulaErr := homebrew.ListInstalledFormulae()
+		casks, caskErr := homebrew.ListInstalledCasks()
+		sgtk.RunOnMainThread(func() {
+			if !uh.developerToolRefresh.IsCurrent(generation) || uh.developerGate.Running() {
+				return
+			}
+			brew := uh.capabilities[capability.Homebrew]
+			for _, item := range uh.developerOptions {
+				if item.kind != "tool" {
+					continue
+				}
+				packages, err := formulae, formulaErr
+				if item.tool.Cask {
+					packages, err = casks, caskErr
+				}
+				uh.applyDeveloperTool(item, packages, err, brew)
+				item.button.SetSensitive(item.allowed)
+			}
+		})
+	}()
+}
+
 func (uh *UserHome) refreshDeveloperOptions(status ublue.Status) {
 	if !uh.developerGate.TryStart() {
 		return
 	}
+	uh.developerToolRefresh.Begin()
 	uh.setDeveloperSensitive(false)
 	backend := uh.wslBackend
 	resolve := !uh.wslBackendResolved
@@ -258,23 +302,26 @@ func packagePresent(packages []homebrew.Package, name string) bool {
 }
 
 func (uh *UserHome) applyDeveloperTool(item *developerOptionRow, packages []homebrew.Package, err error, brew bool) {
-	installed := packagePresent(packages, item.tool.Package)
-	item.allowed = brew && item.tool.Supported() && err == nil && !installed
-	switch {
-	case !item.tool.Supported():
-		item.row.SetSubtitle("Not available for this kind of computer.")
-	case !brew:
-		item.row.SetSubtitle("Not available on this computer.")
-	case err != nil:
-		log.Printf("views: reading installed developer tools failed: %v", err)
-		item.row.SetSubtitle("Couldn't check whether this is installed.")
-	case installed:
-		item.button.SetLabel("Installed")
-		item.row.SetSubtitle("")
-	default:
-		item.button.SetLabel("Install")
-		item.row.SetSubtitle("")
-	}
+	item.toolView = pageview.DeveloperTool(item.tool.Name, item.tool.Description, pageview.DeveloperToolObservation{
+		Supported:  item.tool.Supported(),
+		Homebrew:   brew,
+		ReadFailed: err != nil,
+		Installed:  err == nil && packagePresent(packages, item.tool.Package),
+	})
+	item.allowed = item.toolView.Allowed
+	uh.showDeveloperTool(item, item.toolView)
+}
+
+// showDeveloperTool renders a tool row's subtitle and button. The visible
+// label is the same word on every row, so the accessible name carries the
+// tool's name. GtkButton names itself from its label child through a
+// LABELLED_BY relation, which outranks the LABEL property, so the relation
+// is dropped after every label change or every row would announce "Install".
+func (uh *UserHome) showDeveloperTool(item *developerOptionRow, view pageview.DeveloperToolView) {
+	item.row.SetSubtitle(view.Subtitle)
+	item.button.SetLabel(view.ButtonLabel)
+	item.button.ResetRelation(gtk.AccessibleRelationLabelledByValue)
+	SetAccessibleLabel(item.button, view.AccessibleLabel)
 }
 
 func (uh *UserHome) setDeveloperSensitive(sensitive bool) {
@@ -342,12 +389,16 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 	if !item.allowed || !uh.developerGate.TryStart() {
 		return
 	}
+	if item.kind == "tool" {
+		uh.developerToolRefresh.Begin()
+	}
 	before := item.row.GetSubtitle()
 	uh.setDeveloperSensitive(false)
 	setActivitySpinner(item.spinner, true)
-	item.row.SetSubtitle("Preparing…")
-	if item.button != nil {
-		item.button.SetLabel("Installing…")
+	if item.kind == "tool" {
+		uh.showDeveloperTool(item, pageview.DeveloperToolInstalling(item.tool.Name))
+	} else {
+		item.row.SetSubtitle("Preparing…")
 	}
 	title := item.row.GetTitle()
 	backend := uh.wslBackend
@@ -377,7 +428,7 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 			err = devtools.SetDocker(ctx, enabled, progress)
 			docker, stateErr = devtools.DockerStatus(ctx)
 		case "tool":
-			progress("Installing…")
+
 			err = devtools.Install(item.tool)
 			if item.tool.Cask {
 				packages, stateErr = homebrew.ListInstalledCasks()
@@ -395,12 +446,13 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 			defer uh.developerGate.Reset()
 			setActivitySpinner(item.spinner, false)
 			if dryrun.Enabled() {
-				item.row.SetSubtitle(before)
+				if item.kind == "tool" {
+					uh.showDeveloperTool(item, item.toolView)
+				} else {
+					item.row.SetSubtitle(before)
+				}
 				if item.toggle != nil {
 					item.toggle.set(item.active)
-				}
-				if item.button != nil {
-					item.button.SetLabel("Install")
 				}
 				if err == nil {
 					uh.toastAdder.ShowToast("[DRY-RUN] Preview: " + item.row.GetTitle() + " — no changes made")
@@ -425,8 +477,9 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 					if stateErr == nil {
 						uh.applyDeveloperTool(item, packages, nil, uh.capabilities[capability.Homebrew])
 					} else {
-						item.button.SetLabel("Install")
-						item.row.SetSubtitle("Couldn't check whether it installed.")
+						view := pageview.DeveloperToolUnverified(item.tool.Name, item.tool.Description)
+						item.allowed = view.Allowed
+						uh.showDeveloperTool(item, view)
 					}
 				}
 				if errors.Is(err, devtools.ErrNewLogin) {
@@ -434,7 +487,7 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 				} else if err != nil && !pkexec.IsAuthDismissed(err) {
 					item.row.SetSubtitle(developerOptionFailure(item, enabled, err))
 				} else if item.kind == "tool" && stateErr == nil && !packagePresent(packages, item.tool.Package) {
-					item.row.SetSubtitle("Couldn't confirm it installed. Try again.")
+					item.row.SetSubtitle(item.tool.Description + " Installation finished, but Homebrew has not reported this tool installed.")
 				}
 			}
 			if errors.Is(err, devtools.ErrNewLogin) {
@@ -445,7 +498,7 @@ func (uh *UserHome) onDeveloperOption(item *developerOptionRow, enabled bool) {
 				uh.toastAdder.ShowErrorToast(pkexec.UserMessage(err, developerOptionFailure(item, enabled, err)))
 			}
 			if !dryrun.Enabled() && err == nil {
-				go uh.loadHomebrewPackages()
+				uh.homebrewInventoryChanged()
 			}
 			uh.setDeveloperSensitive(true)
 		})

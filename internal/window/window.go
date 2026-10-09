@@ -60,6 +60,7 @@ type Window struct {
 	configError       *config.LoadError
 	views             *views.UserHome
 	updateShell       *views.UpdateShell
+	updateSettings    *settings.Store // The one updates-preference store: the shell reads it, Preferences binds to it
 	firstRunSteps     []string
 	firstRunIndex     int
 	firstRunActive    bool
@@ -176,6 +177,7 @@ func (w *Window) buildUI() {
 	}
 	coordinator := updateflow.New(providers, updateproviders.NewMaintenance(w.config))
 	store := settings.New()
+	w.updateSettings = store
 	// Each source's policy keeps the administrator's configuration and the
 	// capability floor apart, so the shell can tell "disabled by
 	// administrator" from "not available on this system". Their conjunction
@@ -200,6 +202,9 @@ func (w *Window) buildUI() {
 		w,
 	)
 	w.updateShell.SetOnUpdateFinished(w.views.OnUpdateFinished)
+	// Connected once, here: a source toggled in Preferences (or by
+	// gsettings) re-checks the shell instead of waiting for Refresh.
+	store.OnSourceChanged(w.updateShell.PreferencesChanged)
 	w.views.AttachUpdateShell(w.updateShell)
 	// Create the navigation split view
 	w.splitView = adw.NewNavigationSplitView()
@@ -474,12 +479,11 @@ func (w *Window) setupActions() {
 	aboutAction.ConnectActivate(&aboutActivateCb)
 	w.AddAction(aboutAction)
 
+	// The setup flow's own close-request handler is connected earlier
+	// (buildUI) and stops emission while setup is active, so this
+	// navigation is never refused by setup.
 	closeRequestCb := func(_ gtk.Window) bool {
-		if w.updateShell == nil || !w.updateShell.Busy() {
-			return false
-		}
-		w.updateShell.RevealBusyBanner()
-		return true
+		return w.RefuseCloseWhileUpdating()
 	}
 	w.ConnectCloseRequest(&closeRequestCb)
 
@@ -670,11 +674,6 @@ func (w *Window) ShowToast(message string) {
 // and the message itself is length-bounded at the source.
 const errorToastWidthChars = 48
 
-// authCancelledToast replaces a dismissed PolicyKit prompt's error. The
-// helper never ran, so there is nothing to diagnose and no raw pkexec
-// stderr worth pinning to the window (#492).
-const authCancelledToast = "Authentication cancelled"
-
 // ShowErrorToast shows an error toast immediately, keeping older errors queued
 // until dismissed. It wraps the failing command's diagnosis instead of hiding
 // subsequent failures behind an indefinitely displayed earlier toast.
@@ -691,7 +690,7 @@ const authCancelledToast = "Authentication cancelled"
 func (w *Window) ShowErrorToast(message string) {
 	if pkexec.MessageIsAuthDismissed(message) {
 		log.Printf("window: authentication dismissed: %s", message)
-		w.ShowToast(authCancelledToast)
+		w.ShowToast(pkexec.CancelledMessage)
 		return
 	}
 	toast := adw.NewToast(message)
@@ -892,4 +891,18 @@ func (w *Window) finishFirstRun(completed bool) {
 			sgtk.RunOnMainThread(func() { w.ShowErrorToast("Couldn't save your setup progress. Setup may open again next time.") })
 		}
 	}()
+}
+
+// RefuseCloseWhileUpdating reports whether an update run must keep the window
+// open, and if so shows why: the busy banner lives inside the Updates shell,
+// so a refusal from any other page used to look like a dead close button.
+// The close-request handler and app.quit share it, because
+// g_application_quit never emits close-request.
+func (w *Window) RefuseCloseWhileUpdating() bool {
+	if w.updateShell == nil || !w.updateShell.Busy() {
+		return false
+	}
+	w.navigateToPage("updates")
+	w.updateShell.RevealBusyBanner()
+	return true
 }

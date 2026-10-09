@@ -2,6 +2,7 @@ package pageview
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -82,7 +83,7 @@ func TestBootcUpdateSubtitlesCoverEveryState(t *testing.T) {
 	}{
 		{
 			name: "not staged",
-			want: "Check for a newer version of the operating system.",
+			want: "Downloads the newest version of the operating system. Asks for an administrator password; the new version installs when you restart",
 		},
 		{
 			name:   "staged without version",
@@ -139,6 +140,35 @@ func TestBootcUpdateSubtitlesCoverEveryState(t *testing.T) {
 			}
 		})
 	}
+
+	// The Details row is hidden while it holds no line, so a failure with
+	// no output must not send anyone to it.
+	if got := BootcStageFailureSubtitle(true); got != "The update could not be downloaded. Open Details to see what happened." {
+		t.Fatalf("BootcStageFailureSubtitle(true) = %q", got)
+	}
+	if got := BootcStageFailureSubtitle(false); strings.Contains(got, "Details") {
+		t.Fatalf("BootcStageFailureSubtitle(false) = %q, must not point at a hidden Details row", got)
+	}
+}
+
+// TestBootcStageCopyDescribesTheDownload holds the shakedown's W3-01: the
+// action stages an update behind an administrator prompt, so neither its
+// label nor its idle description may present it as a mere check.
+func TestBootcStageCopyDescribesTheDownload(t *testing.T) {
+	if BootcStageButtonLabel != "Download" {
+		t.Fatalf("BootcStageButtonLabel = %q, want %q", BootcStageButtonLabel, "Download")
+	}
+	idle := BootcUpdateSubtitle(false, "")
+	for _, consequence := range []string{"Downloads", "administrator password", "when you restart"} {
+		if !strings.Contains(idle, consequence) {
+			t.Errorf("BootcUpdateSubtitle(false) = %q, want it to name %q", idle, consequence)
+		}
+	}
+	for _, text := range []string{BootcStageButtonLabel, idle, BootcStageRunningSubtitle} {
+		if strings.Contains(strings.ToLower(text), "check for") || strings.Contains(strings.ToLower(text), "check whether") {
+			t.Errorf("stage copy %q presents the download as a check", text)
+		}
+	}
 }
 
 func TestFeatureRowsAndDescriptions(t *testing.T) {
@@ -162,8 +192,8 @@ func TestFeatureRowsAndDescriptions(t *testing.T) {
 func TestHelpResourcesPreserveConfiguredOrder(t *testing.T) {
 	got := HelpResources("https://example.test", "", "https://chat.example.test")
 	want := []HelpResource{
-		{Title: "Visit project website", URL: "https://example.test"},
-		{Title: "Browse documentation", URL: "https://chat.example.test"},
+		{Title: "Browse documentation", URL: "https://example.test"},
+		{Title: "Ask for help", URL: "https://chat.example.test"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("HelpResources() = %#v, want %#v", got, want)
@@ -276,11 +306,12 @@ func TestSystemVersionRowStaysReadable(t *testing.T) {
 // Details is where the identifiers live, and an unknown value must produce
 // no row at all rather than a labelled blank.
 func TestSystemVersionDetailsOmitUnknownFields(t *testing.T) {
+	const digest = "sha256:110fdf396bd1c0ffee0123456789abcdef0123456789abcdef0123456789ab"
 	full := SystemVersionDetails(
 		"42.20260810",
 		"2026-08-10T20:08:01-06:00",
 		"ghcr.io/ublue-os/bluefin:latest",
-		"sha256:0123456789abcdef0123456789abcdef",
+		digest,
 	)
 	titles := make([]string, 0, len(full))
 	for _, row := range full {
@@ -293,32 +324,13 @@ func TestSystemVersionDetailsOmitUnknownFields(t *testing.T) {
 	if !reflect.DeepEqual(titles, want) {
 		t.Fatalf("SystemVersionDetails() titles = %#v, want %#v", titles, want)
 	}
-	if got := full[3].Subtitle; got != ShortDigest("sha256:0123456789abcdef0123456789abcdef") {
-		t.Fatalf("Build ID = %q, want the shortened digest", got)
+	// These rows exist to be quoted; a shortened digest identifies nothing.
+	if got := full[3].Subtitle; got != digest {
+		t.Fatalf("Build ID = %q, want the whole digest %q", got, digest)
 	}
 
 	if rows := SystemVersionDetails("", "not-a-time", "", ""); len(rows) != 0 {
 		t.Fatalf("SystemVersionDetails() with nothing known = %#v, want no rows", rows)
-	}
-}
-
-func TestSystemDigestShortening(t *testing.T) {
-	tests := []struct {
-		name   string
-		digest string
-		want   string
-	}{
-		{name: "empty"},
-		{name: "short", digest: "sha256:1234", want: "sha256:1234"},
-		{name: "exact boundary", digest: "1234567890123456789", want: "1234567890123456789"},
-		{name: "truncated", digest: "12345678901234567890", want: "1234567890123456789..."},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := ShortDigest(tt.digest); got != tt.want {
-				t.Fatalf("ShortDigest(%q) = %q, want %q", tt.digest, got, tt.want)
-			}
-		})
 	}
 }
 
@@ -331,7 +343,7 @@ func TestStagingLogSubtitleNamesTheCapWhenOneApplied(t *testing.T) {
 	}{
 		{
 			name: "before any output",
-			want: "Shows what happens while updating.",
+			want: "No output",
 		},
 		{
 			name:  "single line",
@@ -384,6 +396,38 @@ func TestFeaturesEmptyStateOnlyWhenNothingIsOffered(t *testing.T) {
 		}
 		if empty && (row.Title == "" || row.Subtitle == "") {
 			t.Errorf("FeaturesEmptyState(%v, %v, %v) shows an empty state without saying why: %+v", tc.bluefin, tc.printers, tc.optional, row)
+		}
+	}
+}
+
+// The export replaces any Brewfile in the home folder, a hand-written one as
+// much as an earlier export, so the row names the file and says so rather
+// than claiming only a previous export is replaced (W2-APPS-4).
+func TestPackageListExportSubtitleNamesWhatItReplaces(t *testing.T) {
+	for _, want := range []string{"Brewfile in your home folder", "Replaces any Brewfile already there."} {
+		if !strings.Contains(PackageListExportSubtitle, want) {
+			t.Errorf("PackageListExportSubtitle = %q, want it to contain %q", PackageListExportSubtitle, want)
+		}
+	}
+	if strings.Contains(PackageListExportSubtitle, "exported last time") {
+		t.Errorf("PackageListExportSubtitle = %q still claims only an earlier export is replaced", PackageListExportSubtitle)
+	}
+}
+
+// Every installed-package row shows the same Pin, Unpin, and Uninstall
+// labels, so the accessible name carries the package in each phase
+// (W2-APPS-5).
+func TestHomebrewPackageButtonNameCarriesThePackage(t *testing.T) {
+	for label, want := range map[string]string{
+		"Uninstall":     "Uninstall jq",
+		"Uninstalling…": "Uninstalling jq",
+		"Uninstalled":   "Uninstalled jq",
+		"Pin":           "Pin jq",
+		"Pinning…":      "Pinning jq",
+		"Unpin":         "Unpin jq",
+	} {
+		if got := HomebrewPackageButtonName(label, "jq"); got != want {
+			t.Errorf("HomebrewPackageButtonName(%q, jq) = %q, want %q", label, got, want)
 		}
 	}
 }

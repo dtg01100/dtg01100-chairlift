@@ -102,8 +102,14 @@ this inventory, independently of the original YAML namespace names.
 | Help | `help_page.go` | Support links, diagnostics and capability explanations |
 
 Powerwash is an existing detail (route `recovery`) built by `recovery.go` and reached from
-Maintenance, with rollback, published-version reads with pin and return-to-stream
-actions, and opt-in reset controls. There is no current System primary page;
+Maintenance, with rollback and opt-in reset controls; the published-versions
+calendar (pin and return to stream) is withdrawn per #522, because its dated
+tags exist only for the deprecated `latest` stream. The Maintenance entry's subtitle is
+`pageview.RecoveryEntrySubtitle` over what the detail actually built (Roll Back
+once the asynchronous status check reveals it, and the reset rows), so it never promises a reset the shipped
+`reset_group: enabled: false` leaves out; without reset rows the detail's page
+description (`pageview.RecoveryPageDescription`) says whether configuration or
+the host is why. There is no current System primary page;
 machine-wide desktop settings belong to the desktop's own settings application.
 
 ### Architecture route map
@@ -156,8 +162,10 @@ percentage is inferred. `Window.ShowToast` and `ShowErrorToast` preempt older
 toasts with Libadwaita's high priority, retaining those older errors in the
 queue rather than leaving every later result behind an infinite timeout. A
 message carrying pkexec's dismissal text (`pkexec.MessageIsAuthDismissed`) is
-not an error: `ShowErrorToast` shows a brief "Authentication cancelled" toast
-instead of pinning raw stderr.
+not an error: `ShowErrorToast` shows the brief `pkexec.CancelledMessage`
+("Authentication cancelled") instead of pinning raw stderr. Views whose failure
+toast is fixed text never carry that text, so they classify the error itself
+with `pageview.PrivilegedFailureToast` (exit 126 anywhere in the chain).
 
 Connect reusable GTK signals once, outside refresh paths. `buttonRoute` and
 `dialogRoute` in `internal/views/widgets.go` reuse stable callback variables
@@ -721,6 +729,9 @@ re-reads after mutations to detect rejected changes. Failed verification leaves
 the switch insensitive; missing tools, sessions and extensions are explained.
 Default presentation is Tailscale on and Sync Folder off, but existing GNOME
 state always wins. OS-image extension defaults remain owned by the image.
+Sync Folder is off by default because it is early (#449), not locked: its
+copy says "Experimental" and its switch enables the extension like any other,
+so no description may call a switchable integration "not ready".
 
 ### Custom Command Menu developer visibility (`internal/devmenu`)
 
@@ -747,7 +758,9 @@ surface in three layers that must stay separate:
   abort the run; `ActionRetryFailed` re-applies only sources that still carry
   an apply error. Post-update maintenance (`updateproviders.NewMaintenance`,
   gated by `maintenance_freespace_group`) runs only after a clean live run and
-  only when the user's `MaintenanceAfterUpdates` preference is set.
+  only when the user's `MaintenanceAfterUpdates` preference is set. When that
+  group is disabled, Preferences shows the preference off, insensitive, and
+  "Disabled by administrator" (`updateproviders.CleanupConfigured`).
 - `internal/updateproviders` holds the production `updateflow.Provider`
   values, which wrap `internal/flatpak`, `internal/homebrew`, `internal/updex`,
   and `internal/bootc`; the coordinator executes nothing itself. Flatpak
@@ -767,13 +780,19 @@ surface in three layers that must stay separate:
   whose policy has `Configured` false reads "Disabled by administrator"; one
   that is configured but not `Available` — the provider's own `Available`
   probe says no, or `Policy.Supported` is false because the capability floor
-  cannot back it — reads "Not available on this computer". `ItemRows` decides
-  which pending items get a child row: the Operating system source's one pending
-  item is its deployment, so that source shows "Update available: <booted> → <new>"
-  on its own row and gets no child row repeating its name. The fold is keyed on
-  the source ID, never an item's name; every other source keeps one row per item,
-  because Applications and Developer tools carry each item's only Update button
-  on that row.
+  cannot back it — reads "Not available on this computer". Both strings
+  come from `updatepresent.SourceLockReason`, which the Preferences dialog's
+  update-source rows (`pageview.UpdateSourcePreferenceSubtitle`) use too, so
+  the two surfaces never word one source differently. Such a locked source's
+  Preferences switch is shown off and insensitive and is not bound to its
+  GSettings key (`pageview.UpdateSourcePreferenceLocked`): bound, it showed
+  the stored preference — on — beside "Disabled by administrator". `ItemRows`
+  decides which pending items get a child row: the Operating system source's
+  one pending item is its deployment, so that source shows
+  "Update available: <booted> → <new>" on its own row and gets no child row
+  repeating its name. The fold is keyed on the source ID, never an item's
+  name; every other source keeps one row per item, because Applications and
+  Developer tools carry each item's only Update button on that row.
 
 The shell learns each source's policy from `Window.buildUI`'s
 `sourcePolicy`, a `map[SourceID]updateflow.Policy` with `Configured` from
@@ -781,6 +800,22 @@ The shell learns each source's policy from `Window.buildUI`'s
 "Host capability floor" above). The four sources are keyed to
 `bootc_updates_group`, `flatpak_updates_group`, and `brew_updates_group` on
 `updates_page`, and `features_group` on `features_page`.
+
+The shell reads the user's preferences through the window's one
+`settings.Store`, which the Preferences dialog's switches are bound to as
+well. `Store.OnSourceChanged`, connected once in `buildUI`, calls
+`UpdateShell.PreferencesChanged` whenever an update-source key changes, and
+the shell starts a check when `updatepresent.RecheckForPreferences` says the
+snapshot on screen no longer matches (`Snapshot.StaleFor`) or a check started
+from older preferences is still in flight. The shell never flips a row
+itself: enablement stays the coordinator's, and a source the user just turned
+on has to be checked anyway. A mutation in flight refuses the check, so
+`finishMutation` asks again once the run ends. Every check also ends with
+`UpdateShell.checkFinished`, which starts another when
+`updatepresent.RecheckAfterCheck` finds the finished snapshot stale for the
+current preferences, so a change made while a check ran is never left until
+a manual Refresh; a snapshot still in `PhaseChecking` belongs to a newer
+check and is left alone.
 
 Everything else the Updates page owns is built by `buildUpdatesPage` into
 `UserHome.updatesPrefsPage`; `Window.buildContentArea` mounts it below the
@@ -792,6 +827,21 @@ to the shell rather than duplicated preference groups. Configuration,
 capability and asynchronous runtime gates determine which groups are shown.
 The automatic-updates switch uses `guardedSwitch`: programmatic rollback after
 failure or preview must not request the opposite mutation.
+
+The dedicated download's button is labelled **Download**
+(`pageview.BootcStageButtonLabel`), and its idle subtitle says it downloads
+the newest version, asks for an administrator password, and installs at the
+next restart: the stage helper checks, pulls, and stages in one operation,
+so a "Check for updates" label promised less than it did. Its Details
+expander is built hidden and revealed by the first streamed line, because a
+stage can print nothing — on Dakota bootc logged its progress to the journal
+rather than to the pipe — and a failure then does not point at Details
+(`pageview.BootcStageFailureSubtitle`). System version renders through
+`renderSystemVersion` from every observed bootc status: the startup read, the
+dedicated download's re-read, and `OnUpdateFinished`'s re-read, ordered by a
+`RefreshGate` so an older read cannot replace a newer one. Its Details rows
+carry the whole build digest and selectable subtitles, because they exist to
+be quoted in a support request.
 
 Restart is the run's only privileged surface of its own. `PhaseRestartRequired`
 is reached only when a source reports that a restart is required — the OS
@@ -819,8 +869,8 @@ delay and no target; scheduled restarts would each need their own action.
 After a live run or a live single-row update (which reports its one source
 as completed), `UserHome.OnUpdateFinished` refreshes the installed Homebrew
 inventory when its source completed and, when the OS source completed,
-re-reads status to refresh Compare references. The coordinator remains the
-badge owner. A preview refreshes nothing.
+re-reads status to refresh Compare references and the System version
+readout. The coordinator remains the badge owner. A preview refreshes nothing.
 `UpdateShell.notifyUpdateComplete` sends the single desktop notification
 (see below) and skips previews.
 
@@ -978,17 +1028,18 @@ a contributor session from the Agents page. It launches Common's merged `ujust
 contribute` recipe through `xdg-terminal-exec`, running the foreground
 contributor container appliance.
 
-Preflight is read-only, uses injectable probe seams, and executes off the GTK thread (`Preflight`):
+Preflight is read-only, uses injectable probe seams, and executes off the GTK thread (`Preflight`) at build and again each time the group is shown, so a requirement the user fixes outside ChairLift — registering with Hive, installing Podman — is picked up without a restart. A read is generation-guarded and stands aside while a session holds the action gate:
 1. `xdg-terminal-exec` on `$PATH` to launch the terminal emulator.
 2. `ujust` on `$PATH`.
 3. `ujust --summary` containing the `contribute` recipe.
 4. `podman` on `$PATH`.
 5. Hive registration file present at `${HIVE_CONTRIBUTE_REGISTRATION:-$HOME/.config/hive/contributor.env}`.
 
-When any check fails, the row displays an actionable subtitle (including a link
-to registration setup when the registration file is missing) and leaves the
-action button insensitive. Ready actions invoke `launcher.Start`, reporting
-launch failures asynchronously through the UI toast surface. Previews under
+When any check fails, the row displays an actionable subtitle and leaves the
+action button insensitive. A missing registration file also shows a
+**Registration Guide** button (`Result.HelpURL`) that opens the registration
+setup page; the URL is not spelled out as unclickable subtitle text. Ready actions invoke `launcher.Run`, reporting
+launch failures asynchronously through the UI toast surface; when the session ends or fails to start, the button returns through a fresh preflight. Previews under
 `--dry-run` log the launch command without opening a terminal or spawning a worker.
 
 ### Printers (`internal/printerapp`)
@@ -1068,15 +1119,22 @@ unverified and unwired.
 two steps (removing every
 user-scope Flatpak, removing every Distrobox container) through function
 seams, and `Summarize` aggregates the outcome. A step whose tool is not
-installed is `OutcomeSkipped`, not a failure — there is nothing for it to
-remove. Both steps are unprivileged; `internal/flatpak.RemoveAllUser` and the
-new `internal/distrobox` package (a minimal wrapper existing only to detect
-Distrobox and remove every container) are the real implementations.
+installed, or whose read-only inventory (`flatpak.HasUserRefs`,
+`distrobox.HasContainers`) finds nothing in the account, is `OutcomeSkipped`,
+not a failure — there is nothing for it to remove. The inventory is read
+first because both removal commands exit 0 with nothing to do, so their
+success alone would claim a removal that never happened; an unreadable
+inventory fails the step. Both steps are unprivileged;
+`internal/flatpak.RemoveAllUser` and the `internal/distrobox` package (a
+minimal wrapper existing only to detect, list, and remove every container)
+are the real implementations.
 
-Factory Reset is `bootc install reset --experimental --apply`, dispatched
+Factory Reset is `bootc install reset --experimental`, dispatched
 through a new `factory-reset` action on the existing `chairlift-helper`
 — it takes no argument, since a factory reset has exactly one target, the
-image already booted.
+image already booted. It deliberately omits `--apply`, which bootc documents
+as always rebooting immediately; the reset takes effect at the next restart,
+as the confirmation says.
 
 Both are gated by `maintenance_page`'s `reset_group`, which ships
 `enabled: false` in `config.yml` (the same default as
@@ -1098,7 +1156,9 @@ retried without restarting the application.
 `internal/autoupdate` classifies the state of `uupd.timer`, the unit
 Universal Blue images ship for unattended updates. It is read-only; the
 privileged writes are `auto-updates-enable` / `auto-updates-disable` on
-`chairlift-helper`.
+`chairlift-helper`. Disabling also masks and stops `uupd-resume.timer`, the
+image's second trigger of the same `uupd.service` (20 minutes after every
+resume), and enabling unmasks it, so "off" stops every unattended run.
 
 The package exists because ChairLift presents this as **one switch** where
 bluefinctl presents a strategy enum, a schedule picker, per-layer switches,
@@ -1277,8 +1337,8 @@ neither a row nor an accelerator: `Shortcuts` and `Bindings` skip it
 structurally, so a detail can never be advertised or registered by accident.
 Powerwash is the live detail. It is a content-stack child of Maintenance, whose
 row stays selected while it is shown, and it draws on two configuration
-namespaces at once — `bootc_updates_group` on `updates_page` for its rollback,
-pin, and return-to-stream controls and `reset_group` on `maintenance_page` for its
+namespaces at once — `bootc_updates_group` on `updates_page` for its rollback
+control and `reset_group` on `maintenance_page` for its
 Powerwash and Factory Reset controls — which
 is why a route's refs are `{Page, Group}` pairs rather than one page field per
 route. `navigation.VisibleRoutes` returns the visible primaries followed by the
@@ -1288,7 +1348,10 @@ back rather than entering it.
 
 The accelerators are:
 
-- `Ctrl+Q` → quit
+- `Ctrl+Q` → quit, unless an update is running: `Window.RefuseCloseWhileUpdating`
+  (shared with the close-request handler, since `g_application_quit` emits no
+  `close-request`) shows the Updates page and its "Updates are still in
+  progress…" banner instead
 - `Ctrl+?` → show shortcuts dialog
 - `Alt+1` through `Alt+N` → navigate to the first through Nth visible page in
   canonical order, with omitted pages leaving no gaps
@@ -1503,11 +1566,14 @@ Nothing on disk is verified: the profile is ChairLift's and is written at launch
 
 Once set up, Ask Bluefin just opens Goose. With no session running, `agentmode.Launch` writes the profile and starts Goose through llmman. With one running — the profile's Chromium `SingletonLock` names a live process on this host and was written during this boot (a lock left by a crash before a reboot may name a reused pid) — it starts `goose-desktop` again in the same profile (`troubleshoot.ReopenCommand`), and Goose's single-instance lock hands that request to the running session, so no second Goose starts. Whether the window is raised is the compositor's call: no activation token is passed, and on GNOME a minimized window stayed minimized while the Shell showed a "Goose is ready" notification instead (lab run `chairlift-wayland-lane-n7fsg`). llmman is not involved there: it refuses a launch while the lock is held.
 
+A fresh launch returns only once Goose holds that lock, its process exits, or 15 seconds pass, so the Goose row stays busy through startup and a second click cannot race the first into a refused `llmman launch`; a non-zero exit during the wait is the launch's error. `agentmode.LaunchResult` says whether the launch started a session or handed off to one already running, and the row's toast (`pageview.GooseLaunchToast`) reports that rather than claiming a window opened — on a host where Goose cannot draw (#544) its process still holds the profile and receives every later launch. Both launches send Goose's stdout and stderr to ChairLift's own stderr, so its startup errors land in ChairLift's journal stream.
+
 `chairlift --ask-bluefin` is the entry point for Bluefin's Custom Command Menu and desktop shortcut. Cold invocations and running-application remote invocations behave identically:
 - When all readiness conditions are met, Goose Desktop is launched off the GTK main thread (the launch writes the profile) without presenting the Control Center window.
-- When any prerequisite is missing, or the launch fails to start, Control Center opens to the Agents page and displays the reason as a toast. A later asynchronous Goose exit is logged, not rerouted through the window.
+- When any prerequisite is missing, or the launch fails to start or Goose exits non-zero during its startup wait, Control Center opens to the Agents page and displays the reason as a toast. A later asynchronous Goose exit is logged, not rerouted through the window.
 
-The Troubleshooting group also offers a **Show Ask Bluefin in menu** preference. It manages the distro-owned Ask Bluefin entry in GNOME Shell's Custom Command Menu (`org.gnome.shell.extensions.custom-command-list`) via `internal/devmenu`, which recognizes the entry by its label and one of three commands: the web link, `chairlift --ask-bluefin`, or `/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper --ask-bluefin` as Bluefin's distro layer ships it (projectbluefin/common#1396). ChairLift changes only the entry's visibility, never its command. When hidden, it writes a user-layer override (`visible=false`); when shown, it resets the key in the user layer to reveal the distro default without pinning it into user state.
+The Troubleshooting group also offers a **Show Ask Bluefin in menu** preference. It manages the distro-owned Ask Bluefin entry in GNOME Shell's Custom Command Menu (`org.gnome.shell.extensions.custom-command-list`) via `internal/devmenu`, which recognizes the entry by its label and one of three commands: the web link, `chairlift --ask-bluefin`, or `/home/linuxbrew/.linuxbrew/bin/chairlift-wrapper --ask-bluefin` as Bluefin's distro layer ships it (projectbluefin/common#1396). ChairLift changes only the entry's visibility, never its command. When hidden, it writes a user-layer override (`visible=false`); when shown, it resets the key in the user layer to reveal the distro default without pinning it into user state. The extension renders only slots listed in its `command-order` key, so the switch reads on only when the tuple is visible and its slot is listed; showing the entry also appends a missing slot to `command-order` (resetting instead when the result equals the distro default). Dakota's distro layer moves Ask Bluefin to `command12` while inheriting Bluefin's order of 1..11, which otherwise left a visible tuple the menu never rendered.
+After every flip the switch is re-set from a fresh `devmenu.AskBluefinState` read, decided by `actionmsg.AskBluefinMenu`: a preview says the menu entry was not changed, a write that did not take effect or a failed read-back is an error toast, and a failed read-back restores the previous position rather than leaving the switch half-flipped.
 
 ## Explicit setup flow
 

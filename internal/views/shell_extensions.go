@@ -10,6 +10,7 @@ import (
 	sgtk "github.com/frostyard/snowkit/gtk"
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/shellextensions"
+	"github.com/projectbluefin/chairlift/internal/views/pageview"
 )
 
 // buildShellExtensionsGroup never writes on load. GNOME owns saved preferences;
@@ -38,8 +39,10 @@ func (uh *UserHome) buildShellExtensionsGroup(page *adw.PreferencesPage) {
 						row.SetSubtitle("Couldn't check this setting. Reopen the app to try again.")
 					} else {
 						state := states[extension.UUID]
-						toggle.set(state.Enabled)
-						toggle.widget.SetSensitive(state.Installed)
+						view := pageview.DesktopIntegration(extension, states, nil)
+						toggle.set(view.Active)
+						toggle.widget.SetSensitive(view.Sensitive)
+						row.SetSubtitle(view.Subtitle)
 						if err == nil && !dryrun.Enabled() && state.Enabled != enabled {
 							err = fmt.Errorf("GNOME did not apply the requested change")
 						}
@@ -66,17 +69,14 @@ func (uh *UserHome) buildShellExtensionsGroup(page *adw.PreferencesPage) {
 			sgtk.RunOnMainThread(func() {
 				if err != nil {
 					log.Printf("views: desktop integrations unavailable: %v", err)
-					row.SetSubtitle("Only available on the GNOME desktop.")
-					return
 				}
-				state := states[extension.UUID]
-				if !state.Installed {
-					row.SetSubtitle("Not installed on this computer.")
-					return
-				}
-				toggle.set(state.Enabled)
-				toggle.widget.SetSensitive(true)
-				row.SetSubtitle(extension.Description)
+				// The switch starts at the catalog default; replace it with
+				// GNOME's observed state on every path, so a missing
+				// extension or tool never reads as enabled.
+				view := pageview.DesktopIntegration(extension, states, err)
+				toggle.set(view.Active)
+				toggle.widget.SetSensitive(view.Sensitive)
+				row.SetSubtitle(view.Subtitle)
 			})
 		}()
 	}

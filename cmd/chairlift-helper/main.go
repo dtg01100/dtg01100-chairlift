@@ -17,22 +17,20 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"os/user"
-	"strconv"
-	"time"
-
 	"github.com/projectbluefin/chairlift/internal/bootc"
 	"github.com/projectbluefin/chairlift/internal/imageinfo"
 	"github.com/projectbluefin/chairlift/internal/registrytags"
 	"github.com/projectbluefin/chairlift/internal/ubluehelper"
+	"io"
+	"os"
+	"os/exec"
+	"os/user"
+	"strconv"
 )
-
-const defaultTimeout = 10 * time.Minute
 
 func main() {
 	invocation, err := ubluehelper.ParseInvocation(os.Args[1:])
@@ -50,7 +48,7 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), ubluehelper.Timeout(invocation.Command))
 	defer cancel()
 
 	switch invocation.Command {
@@ -117,13 +115,16 @@ func runChannelSwitch(ctx context.Context, invocation ubluehelper.Invocation) {
 // with the fixed rollback argv is the switch the person asked for.
 func switchImage(ctx context.Context, args []string, failure string) {
 	target := args[len(args)-1]
-	if err := run(ctx, "bootc", args...); err != nil {
-		if status, statusErr := bootc.GetStatus(ctx); statusErr == nil && status.Status.Rollback.ImageRef() == target {
-			if rerr := run(ctx, "bootc", ubluehelper.RollbackArgs()...); rerr != nil {
-				fatal(fmt.Sprintf("%s: %v; rollback to %s failed: %v", failure, err, target, rerr))
+	var captured bytes.Buffer
+	if err := runCapture(ctx, &captured, "bootc", args...); err != nil {
+		if ubluehelper.IsSameRollbackRefusal(captured.String()) {
+			if status, statusErr := bootc.GetStatus(ctx); statusErr == nil && status.Status.Rollback.ImageRef() == target {
+				if rerr := run(ctx, "bootc", ubluehelper.RollbackArgs()...); rerr != nil {
+					fatal(fmt.Sprintf("%s: %v; rollback to %s failed: %v", failure, err, target, rerr))
+				}
+				fmt.Printf("switched to %s (the previous deployment) — restart to apply\n", target)
+				return
 			}
-			fmt.Printf("switched to %s (the previous deployment) — restart to apply\n", target)
-			return
 		}
 		fatal(fmt.Sprintf("%s: %v", failure, err))
 	}
@@ -155,6 +156,9 @@ func runDriverSwitch(ctx context.Context, invocation ubluehelper.Invocation) {
 
 // runPin supplies only the system descriptor and single-tag registry resolver;
 // the gated helper package owns all target derivation and refusal decisions.
+// The switch goes through switchImage like every other image switch: unpin's
+// target is the stream the host left when it pinned, which is exactly the
+// rollback deployment a composefs `bootc switch` refuses to switch to.
 func runPin(ctx context.Context, invocation ubluehelper.Invocation) {
 	info, err := imageinfo.Detect()
 	if err != nil {
@@ -169,10 +173,7 @@ func runPin(ctx context.Context, invocation ubluehelper.Invocation) {
 		fmt.Printf("[DRY-RUN] would execute: bootc %v\n", args)
 		return
 	}
-	if err := run(ctx, "bootc", args...); err != nil {
-		fatal(fmt.Sprintf("bootc switch failed: %v", err))
-	}
-	fmt.Printf("switched to %s — restart to apply\n", args[len(args)-1])
+	switchImage(ctx, args, "bootc switch failed")
 }
 
 // runDevGroups adds or removes the invoking user across every developer
@@ -270,8 +271,8 @@ func runFactoryReset(ctx context.Context, invocation ubluehelper.Invocation) {
 	fmt.Println("factory reset applied — restart to complete it")
 }
 
-// runAutoUpdates turns the unattended-update timer on or off. Each step must
-// succeed: a partial application would leave the timer in a state that does
+// runAutoUpdates turns the unattended-update timers on or off. Each step must
+// succeed: a partial application would leave the timers in a state that does
 // not match what the user was shown.
 func runAutoUpdates(ctx context.Context, invocation ubluehelper.Invocation) {
 	steps, ok := ubluehelper.AutoUpdateArgs(invocation.Command)
@@ -326,17 +327,27 @@ func runDocker(ctx context.Context, invocation ubluehelper.Invocation) {
 	}
 }
 
-// run executes one privileged command, forwarding its output so the calling
-// GUI can surface a real failure message instead of a bare exit code.
-func run(ctx context.Context, name string, args ...string) error {
+// runCapture executes one privileged command, forwarding stdout/stderr to the caller's console
+// while also teeing stderr into the provided buffer for inspection.
+func runCapture(ctx context.Context, stderrBuf io.Writer, name string, args ...string) error {
 	full := append([]string{name}, args...)
 	if line, err := json.Marshal(full); err == nil {
 		fmt.Printf("%s%s\n", ubluehelper.HelperExecPrefix, line)
 	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if stderrBuf != nil {
+		cmd.Stderr = io.MultiWriter(os.Stderr, stderrBuf)
+	} else {
+		cmd.Stderr = os.Stderr
+	}
 	return cmd.Run()
+}
+
+// run executes one privileged command, forwarding its output so the calling
+// GUI can surface a real failure message instead of a bare exit code.
+func run(ctx context.Context, name string, args ...string) error {
+	return runCapture(ctx, nil, name, args...)
 }
 
 func fatal(msg string) {

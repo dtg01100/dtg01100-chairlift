@@ -131,6 +131,7 @@ Feature: Updates
     Then the Updates status reads "1 update available"
     When I click the "Update all" button
     Then the application log contains "[DRY-RUN] Would execute: flatpak update -y --user"
+    And I see "[DRY-RUN] Preview: updates would be installed — no changes made"
     And the "Update all" button is sensitive
     And the "Refresh" button is sensitive
     And the Updates status reads "1 update available"
@@ -150,6 +151,7 @@ Feature: Updates
     When I click the "Update all" button
     Then the application log contains "[DRY-RUN] Would execute: brew update"
     And the application log contains "[DRY-RUN] Would execute: brew upgrade"
+    And I see "[DRY-RUN] Preview: updates would be installed — no changes made"
     And the "Update all" button is sensitive
     And the "Developer tools" row says "1 update available"
     And the application log does not contain "Would execute: flatpak update"
@@ -165,6 +167,41 @@ Feature: Updates
     And the "Developer tools" row says "Up to date"
     And the Updates sidebar row shows no badge
     And the flatpak tool was never asked to "remote-ls"
+
+  # W3-05: Preferences showed this source's switch ON beside "Disabled by your
+  # administrator", in different words from the Updates page's row.
+  @config.updates-no-flatpak @stub.updates-flatpak-one-update @stub.updates-brew-current
+  Scenario: Preferences shows an administrator-disabled source switched off, in the Updates page's words
+    Given ChairLift is running
+    Then the "Applications" row says "Disabled by administrator"
+    When I press "<Control>comma"
+    Then the Preferences "Applications" row says "Disabled by administrator"
+    And the Preferences "Applications" switch is off and refuses input
+    And the Preferences "Developer tools" switch is on and accepts input
+
+  # "Run maintenance after updates" stayed bound and sensitive with routine
+  # cleanup disabled, offering an ON switch for a post-update phase that skips
+  # every step.
+  @config.config-one-group-off @stub.updates-brew-current
+  Scenario: Preferences locks post-update maintenance when cleanup is disabled
+    Given ChairLift is running
+    When I press "<Control>comma"
+    Then the Preferences "Run maintenance after updates" row says "Disabled by administrator"
+    And the Preferences "Run maintenance after updates" switch is off and refuses input
+
+  # W3-15: turning a source off in Preferences left its row "Up to date"
+  # until a manual Refresh.
+  @stub.updates-flatpak-current @stub.updates-brew-current
+  Scenario: Turning a source off in Preferences updates its row without a Refresh
+    Given ChairLift is running
+    Then the "Applications" row says "Up to date"
+    When I press "<Control>comma"
+    And I toggle the Preferences "Applications" switch
+    Then the Preferences "Applications" switch is off and accepts input
+    When I press "Escape"
+    Then no dialog is shown
+    And the "Applications" row says "Disabled in preferences"
+    And the "Developer tools" row says "Up to date"
 
   # Issue #349 regressions: the Updates preferences page (buildUpdatesPage)
   # mounts beneath the update shell's sources, so automatic updates, the
@@ -189,7 +226,8 @@ Feature: Updates
   @stub.updates-flatpak-current @stub.updates-brew-current
   Scenario: Asking for early updates in a dry run journals the channel word only and stays on stable
     Given ChairLift is running
-    Then the switch in the "Get updates early" row is off
+    Then the Updates status starts with "Up to date · checked at"
+    And the switch in the "Get updates early" row is off
     When I toggle the switch in the "Get updates early" row
     Then the action journal records "channel-switch" as dry-run
     And the journalled command is "pkexec /usr/bin/chairlift-helper channel-switch testing --dry-run"
@@ -198,10 +236,23 @@ Feature: Updates
     And the switch in the "Get updates early" row is off
     And the action journal holds exactly 1 entry
 
+  # W4: switching channel replaces the operating system, so the update shell
+  # admits it like a stage; a click it refuses says why rather than racing
+  # a check or an update run's own staging.
+  @stub.updates-flatpak-slow-check @stub.updates-brew-current
+  Scenario: Asking for early updates while a check runs is refused with an explanation
+    Given ChairLift is running
+    Then the Updates status reads "Checking for updates…"
+    When I toggle the switch in the "Get updates early" row
+    Then I see "Wait for the current update check or installation to finish"
+    And the switch in the "Get updates early" row is off
+    And the action journal is empty
+
   @stub.updates-image-dakota-stable @stub.updates-flatpak-current @stub.updates-brew-current
   Scenario: Switching to the recommended graphics driver in a dry run journals the driver word and restores the button
     Given ChairLift is running
-    Then the "Graphics driver" row says "Switch to the NVIDIA (proprietary) driver for your NVIDIA + Intel graphics"
+    Then the Updates status starts with "Up to date · checked at"
+    And the "Graphics driver" row says "Switch to the NVIDIA (proprietary) driver for your NVIDIA + Intel graphics"
     When I click the "Switch" button in the "Graphics driver" row
     Then the action journal records "driver-switch" as dry-run
     And the journalled command is "pkexec /usr/bin/chairlift-helper driver-switch nvidia --dry-run"

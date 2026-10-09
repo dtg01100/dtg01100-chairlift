@@ -10,6 +10,7 @@ import (
 
 	"github.com/leonelquinteros/gotext"
 	"github.com/projectbluefin/chairlift/internal/updateflow"
+	"github.com/projectbluefin/chairlift/internal/userprefs"
 )
 
 // Presentation is the aggregate status shown by the update shell's header:
@@ -63,17 +64,32 @@ func Snapshot(state updateflow.Snapshot) Presentation {
 	}
 }
 
+// SourceLockReason explains why no user preference can turn a source on: the
+// administrator's configuration first, then the host capability floor. It is
+// empty for an operable source. The Updates page's source rows and the
+// Preferences dialog's source switches both use it, so the two surfaces say
+// the same thing about the same source.
+func SourceLockReason(state updateflow.SourceState) string {
+	switch {
+	case !state.Configured:
+		return gotext.Get("Disabled by administrator")
+	case !state.Available:
+		return gotext.Get("Not available on this computer")
+	default:
+		return ""
+	}
+}
+
 // Source maps one source state to its row title and subtitle. A failure is
 // said in plain words; the raw error is logged where it is produced
 // (updateflow.Coordinator), never shown.
 func Source(state updateflow.SourceState) (title, subtitle string) {
 	title = sourceTitle(state.ID)
 
+	if reason := SourceLockReason(state); reason != "" {
+		return title, reason
+	}
 	switch {
-	case !state.Configured:
-		return title, gotext.Get("Disabled by administrator")
-	case !state.Available:
-		return title, gotext.Get("Not available on this computer")
 	case !state.Enabled:
 		return title, gotext.Get("Disabled in preferences")
 	case state.Checking:
@@ -191,6 +207,27 @@ func CanStartOperation(busy, closed bool) bool {
 	return !busy && !closed
 }
 
+// RecheckForPreferences reports whether a changed update-source preference
+// needs a new coordinator check for the shell to stay truthful: the snapshot
+// on screen enables a source the preferences no longer do (or the reverse),
+// or a check is in flight with the preferences it started from. Only a check
+// recomputes enablement — the coordinator owns it — and a source the user
+// just turned on has not been checked at all.
+func RecheckForPreferences(snapshot updateflow.Snapshot, preferences userprefs.Values) bool {
+	return snapshot.Phase == updateflow.PhaseChecking || snapshot.StaleFor(preferences)
+}
+
+// RecheckAfterCheck reports whether a check that has just returned left the
+// shell describing preferences other than the current ones, so the shell
+// must check again. A preference changed while that check was in flight is
+// otherwise only noticed by a manual Refresh. A snapshot still in
+// PhaseChecking belongs to a newer check, which already started from the
+// current preferences, so it never asks for another: asking would supersede
+// that check and loop for as long as checks overlap.
+func RecheckAfterCheck(snapshot updateflow.Snapshot, preferences userprefs.Values) bool {
+	return snapshot.Phase != updateflow.PhaseChecking && snapshot.StaleFor(preferences)
+}
+
 // PrimaryActionEnabled reports whether the page-level primary action button
 // (check, update all, or retry failed) should be sensitive. Restarting is not
 // a primary action: it lives on the Operating system row (#439). The action
@@ -253,6 +290,8 @@ func updatingStatus(state updateflow.Snapshot) string {
 		return state.Progress
 	case state.Current != "":
 		return gotext.Get("%s: installing updates…", sourceTitle(state.Current))
+	case state.Maintaining:
+		return gotext.Get("Cleaning up after updates…")
 	default:
 		return gotext.Get("Installing updates…")
 	}

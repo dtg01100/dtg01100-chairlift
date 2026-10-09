@@ -35,6 +35,8 @@ package actionmsg
 import (
 	"fmt"
 	"strings"
+
+	"github.com/projectbluefin/chairlift/internal/pkexec"
 )
 
 // BundleDump returns the toast text for exporting the installed package list.
@@ -84,6 +86,24 @@ func Uninstall(dryRun bool, name string) string {
 		return fmt.Sprintf("[DRY-RUN] Preview: %s would be uninstalled — no changes made", name)
 	}
 	return fmt.Sprintf("%s uninstalled", name)
+}
+
+// UninstallFailure returns the error toast for a failed Homebrew uninstall.
+// When Homebrew refused because installed packages still need it,
+// dependents names them: a bare "Could not uninstall" left a retry that
+// fails the same way as the only thing to try. Any other failure keeps its
+// detail in the log.
+func UninstallFailure(name string, dependents []string) string {
+	switch len(dependents) {
+	case 0:
+		return fmt.Sprintf("Could not uninstall %s", name)
+	case 1:
+		return fmt.Sprintf("Could not uninstall %s because %s needs it", name, dependents[0])
+	default:
+		last := len(dependents) - 1
+		return fmt.Sprintf("Could not uninstall %s because %s and %s need it",
+			name, strings.Join(dependents[:last], ", "), dependents[last])
+	}
 }
 
 // Pin returns toast text for a formula pin or unpin.
@@ -148,6 +168,13 @@ func SystemStage(dryRun bool, staged bool) string {
 	}
 	return "System is up to date"
 }
+
+// UpdateAllPreview is the toast for an Update all run that only previewed
+// its sources (dry-run). The panel returns to "Updates available" because
+// nothing was installed, which without this toast reads like a failed or
+// silently ignored run; a live run reports through its completion
+// notification and the panel instead.
+const UpdateAllPreview = "[DRY-RUN] Preview: updates would be installed — no changes made"
 
 // TapTrustDecision is the result of deciding whether trusting a Homebrew tap
 // should mutate the Untrusted Homebrew Taps UI (remove the tap's row, hide
@@ -224,6 +251,20 @@ func MaintenanceScript(dryRun bool, title string) ScriptDecision {
 	}
 }
 
+// MaintenanceScriptFailure words a failed configured maintenance script.
+// A sudo script runs through pkexec, and pkexec exits 126 when the user
+// dismissed the authentication prompt; the script never ran, so that is the
+// brief "Authentication cancelled" toast (isError false) every other
+// privileged view shows, not a pinned "failed: exit status 126". The script
+// runner captures no stderr, so the exit status is the only signal. A script
+// run without pkexec owns its own exit statuses, so its 126 stays a failure.
+func MaintenanceScriptFailure(title string, sudo bool, err error) (text string, isError bool) {
+	if sudo && pkexec.IsAuthDismissed(err) {
+		return pkexec.CancelledMessage, false
+	}
+	return fmt.Sprintf("%s failed: %v", title, err), true
+}
+
 // FeatureToggleDecision is the result of deciding whether toggling a system
 // feature's switch (onFeatureToggled in internal/views/features_page.go,
 // following a successful updex.EnableFeature/DisableFeature call) should
@@ -274,25 +315,26 @@ func FeatureToggle(dryRun bool, enable bool, name string) FeatureToggleDecision 
 	}
 }
 
-// LiveryToggleDecision is the result of deciding whether flipping one of the
-// Livery page's section master switches (onLiveryAppGridToggled and
-// onLiverySurfaceToggled in internal/views/livery_actions.go) may advance the
-// page's own view of that section, and what toast to show for the decision.
-type LiveryToggleDecision struct {
+// LiveryDecision is the result of deciding whether a finished Livery action —
+// a section master switch (LiveryToggle), a mark selection (LiverySelection),
+// or a rotate-at-login switch (LiveryRotation), all in
+// internal/views/livery_actions.go — may advance the page's own view of that
+// section, and what toast to show for the decision.
+type LiveryDecision struct {
 	// MutateUI is true when the new value was really persisted and the page
-	// may mirror it: advance the section's in-memory enabled flag, change
-	// its sub-rows' sensitivity, and leave the switch where the user put
-	// it. It is exactly !dryRun — under dry-run livery.SetBool returns
-	// before touching gsettings (internal/livery/settings.go), so the
-	// stored value never moved and the page must neither mirror nor display
-	// a change that did not happen. The caller must not independently
+	// may mirror it: advance the section's in-memory state, change its
+	// sub-rows, and leave the control where the user put it. It is exactly
+	// !dryRun — under dry-run livery.SetBool and livery.SetString return
+	// before touching gsettings (internal/livery/settings.go), so the stored
+	// value never moved and the page must neither mirror nor display a
+	// change that did not happen. The caller must not independently
 	// recompute that condition: the same decision value drives the mirror,
-	// the switch restore in releaseLiveryToggle, and the toast below.
+	// the control restore, and the toast below.
 	MutateUI bool
-	// Toast is the message to show once the section's work has finished. It
-	// is empty on a live run, where a successful section toggle is its own
+	// Toast is the message to show once the action's work has finished. It
+	// is empty on a live run, where the changed control is its own
 	// confirmation and the page has never shown a toast for one; only the
-	// preview needs words, because the switch visibly springs back.
+	// preview needs words, because the control visibly springs back.
 	Toast string
 }
 
@@ -301,18 +343,44 @@ type LiveryToggleDecision struct {
 // may not. MutateUI is exactly !dryRun. name is the section's display name
 // (pageview.LiverySectionName), never a livery.Surface value or a gsettings
 // key.
-func LiveryToggle(dryRun bool, enable bool, name string) LiveryToggleDecision {
+func LiveryToggle(dryRun bool, enable bool, name string) LiveryDecision {
 	if dryRun {
-		verb := "turned on"
-		if !enable {
-			verb = "turned off"
-		}
-		return LiveryToggleDecision{
-			MutateUI: false,
-			Toast:    fmt.Sprintf("[DRY-RUN] Preview: %s would be %s — no changes made", name, verb),
-		}
+		return LiveryDecision{Toast: liveryPreview(name + " would be " + liveryTurned(enable))}
 	}
-	return LiveryToggleDecision{MutateUI: true}
+	return LiveryDecision{MutateUI: true}
+}
+
+// LiverySelection decides whether a brand, project, foundation mark, or
+// custom-file pick may replace the section's confirmed selection. Under
+// dry-run the chooser closes and the row keeps its old value, so the preview
+// toast is what says the pick was understood. name is as for LiveryToggle.
+func LiverySelection(dryRun bool, name string) LiveryDecision {
+	if dryRun {
+		return LiveryDecision{Toast: liveryPreview(name + " would change")}
+	}
+	return LiveryDecision{MutateUI: true}
+}
+
+// LiveryRotation decides whether a rotate-at-login switch may advance the
+// confirmed rotation pair. Under dry-run the switch springs back after its
+// spinner, so the preview toast says what would have been scheduled. name is
+// as for LiveryToggle.
+func LiveryRotation(dryRun bool, enable bool, name string) LiveryDecision {
+	if dryRun {
+		return LiveryDecision{Toast: liveryPreview("rotating " + name + " at login would be " + liveryTurned(enable))}
+	}
+	return LiveryDecision{MutateUI: true}
+}
+
+func liveryTurned(enable bool) string {
+	if enable {
+		return "turned on"
+	}
+	return "turned off"
+}
+
+func liveryPreview(what string) string {
+	return fmt.Sprintf("[DRY-RUN] Preview: %s — no changes made", what)
 }
 
 // FeatureUpdate returns the toast text for the Features page's "Update"
@@ -497,38 +565,6 @@ func Rollback(dryRun bool) FeatureToggleDecision {
 	}
 }
 
-// PinBuild decides whether the pin action should confirm, and what toast to
-// show. Confirm is exactly !dryRun, for the same reason as Rollback: under
-// dry-run ublue.runHelper short-circuits before pkexec, so no build was
-// staged and confirming would misreport what will boot next.
-func PinBuild(dryRun bool, day string) FeatureToggleDecision {
-	if dryRun {
-		return FeatureToggleDecision{
-			Confirm: false,
-			Toast:   fmt.Sprintf("[DRY-RUN] Preview: would pin version %s — no changes made", day),
-		}
-	}
-	return FeatureToggleDecision{
-		Confirm: true,
-		Toast:   "Version pinned. Restart to use it.",
-	}
-}
-
-// ReturnToStream decides whether the unpin action should confirm, and what
-// toast to show. Confirm is exactly !dryRun, for the same reason as PinBuild.
-func ReturnToStream(dryRun bool) FeatureToggleDecision {
-	if dryRun {
-		return FeatureToggleDecision{
-			Confirm: false,
-			Toast:   "[DRY-RUN] Preview: would resume regular updates — no changes made",
-		}
-	}
-	return FeatureToggleDecision{
-		Confirm: true,
-		Toast:   "Restart to go back to regular updates.",
-	}
-}
-
 // FactoryReset decides whether the factory-reset row should adopt its
 // applied subtitle, and what toast to show. Confirm is exactly !dryRun, the
 // same reasoning as Rollback: under dry-run nothing was staged.
@@ -548,15 +584,21 @@ func FactoryReset(dryRun bool) FeatureToggleDecision {
 // Powerwash decides whether the Powerwash row should show its outcome, and
 // what toast to display. Unlike Rollback and FactoryReset, Powerwash runs
 // two independent, unprivileged steps that can each succeed, fail, or be
-// skipped (a tool not installed), so Confirm is not simply !dryRun — a live
-// run in which nothing was actually removed must not claim success, the same
-// distinction internal/views/actionmsg.GamingMode already makes.
+// skipped (a tool not installed, or nothing in the account), so Confirm is
+// not simply !dryRun — a live run in which nothing was actually removed must
+// not claim success, the same distinction internal/views/actionmsg.GamingMode
+// already makes. A preview reads the same inventory, so it previews only a
+// removal that would happen.
 func Powerwash(dryRun bool, succeeded, failed int) FeatureToggleDecision {
 	if dryRun {
-		return FeatureToggleDecision{
-			Confirm: false,
-			Toast:   "[DRY-RUN] Preview: would remove your Flatpak apps and containers — no changes made",
+		toast := "[DRY-RUN] Preview: would remove your Flatpak apps and containers — no changes made"
+		switch {
+		case failed > 0:
+			toast = "[DRY-RUN] Preview: could not read everything Powerwash would remove — no changes made"
+		case succeeded == 0:
+			toast = "[DRY-RUN] Preview: nothing is installed to remove — no changes made"
 		}
+		return FeatureToggleDecision{Confirm: false, Toast: toast}
 	}
 	switch {
 	case succeeded == 0 && failed == 0:
@@ -649,4 +691,37 @@ func PrinterApp(dryRun bool, enable bool, rowTitle string) FeatureToggleDecision
 		return FeatureToggleDecision{Confirm: true, Toast: rowTitle + " is on."}
 	}
 	return FeatureToggleDecision{Confirm: true, Toast: rowTitle + " is off. Your printer settings were kept."}
+}
+
+// AskBluefinMenuDecision is the outcome of flipping the Agents page's "Show
+// Ask Bluefin in menu" switch.
+type AskBluefinMenuDecision struct {
+	// Active is the position the switch must show: the observed visibility
+	// when it was read back, otherwise the last known one (!requested).
+	Active bool
+	// Toast is empty when the requested change was observed applied.
+	Toast string
+	// Error selects an error toast rather than an ordinary one.
+	Error bool
+}
+
+// AskBluefinMenu decides what the Ask Bluefin menu switch shows after
+// devmenu.SetAskBluefinVisible (err) and the read-back
+// devmenu.AskBluefinState (observed, readErr). A preview says nothing
+// changed, and a write that did not take effect is reported rather than
+// silently snapping the switch back.
+func AskBluefinMenu(dryRun, requested, observed bool, err, readErr error) AskBluefinMenuDecision {
+	switch {
+	case readErr != nil && err != nil:
+		return AskBluefinMenuDecision{Active: !requested, Toast: "Could not update the Ask Bluefin menu entry.", Error: true}
+	case readErr != nil:
+		return AskBluefinMenuDecision{Active: !requested, Toast: "Could not verify the Ask Bluefin menu entry.", Error: true}
+	case err != nil:
+		return AskBluefinMenuDecision{Active: observed, Toast: "Could not update the Ask Bluefin menu entry.", Error: true}
+	case dryRun:
+		return AskBluefinMenuDecision{Active: observed, Toast: "Preview only — the menu entry was not changed."}
+	case observed != requested:
+		return AskBluefinMenuDecision{Active: observed, Toast: "The Ask Bluefin menu entry did not change.", Error: true}
+	}
+	return AskBluefinMenuDecision{Active: observed}
 }

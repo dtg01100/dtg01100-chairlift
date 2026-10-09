@@ -48,9 +48,9 @@ Feature: Agents page
   Scenario: Open llmman hands its loopback web interface to xdg-open
     Given ChairLift is running
     When I open the "Agents" page
-    # The row is the button's label (AdwActionRow activatable widget), so the
-    # "Open" button announces itself as "Models and Chat".
-    And I click the "Models and Chat" button in the "Models and Chat" row
+    # The button is announced by its visible label (WCAG 2.5.3), not by the
+    # row title AdwActionRow would otherwise lend its activatable widget.
+    And I click the "Open llmman" button in the "Models and Chat" row
     Then xdg-open was asked to open "http://127.0.0.1:17434/"
     And the action journal is empty
 
@@ -83,7 +83,7 @@ Feature: Agents page
     And I see "[DRY-RUN] Preview: Agent Mode would be turned on — no changes made"
     And the Agent Mode unit does not exist
     And the Agent Mode environment fragment does not exist
-    And brew was never asked to "bundle"
+    And brew was never asked to "bundle install"
     And the systemctl tool was never asked to mutate
     And the action journal is empty
 
@@ -280,12 +280,25 @@ Feature: Agents page
     Then the application log contains "[DRY-RUN] would launch xdg-terminal-exec ujust contribute"
     And I see "[DRY-RUN] Preview: would launch Contribute to Bluefin in a terminal"
 
-  @stub.agents.contribute.noreg
+  @stub.agents.contribute.noreg @stub.help-xdg-open
   Scenario: Contribute to Bluefin explains missing Hive registration
     Given ChairLift is running
     When I open the "Agents" page
     Then the "Contribute to Bluefin" row says "Sign up as a contributor first."
     And the "Contribute" button in the "Contribute to Bluefin" row is insensitive
+    When I click the "Registration Guide" button in the "Contribute to Bluefin" row
+    Then xdg-open was asked to open "https://github.com/projectbluefin/contribute#configuration"
+
+  @stub.agents.contribute.noreg
+  Scenario: Contribute to Bluefin re-checks its requirements when Agents is shown again
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the "Contribute to Bluefin" row says "Sign up as a contributor first."
+    When this machine registers with Hive
+    And I open the "Help" page
+    And I open the "Agents" page
+    Then the "Contribute to Bluefin" row says "Opens a terminal to help build Bluefin."
+    And the "Contribute" button in the "Contribute to Bluefin" row is sensitive
 
   @stub.agents.devmenu
   Scenario: Show Ask Bluefin in menu dry-run toggle previews and restores without writing dconf
@@ -295,6 +308,7 @@ Feature: Agents page
     When I toggle the switch in the "Show Ask Bluefin in menu" row
     Then the application log contains "[DRY-RUN] would set Custom Command Menu command11 visible=false"
     And the switch in the "Show Ask Bluefin in menu" row is on
+    And I see "Preview only — the menu entry was not changed."
     And dconf was never asked to "write"
     And dconf was never asked to "reset"
 
@@ -331,5 +345,16 @@ Feature: Agents page
     When I toggle the switch in the "Show Ask Bluefin in menu" row
     Then the application log contains "[DRY-RUN] would set Custom Command Menu command11 visible=false"
     And the switch in the "Show Ask Bluefin in menu" row is on
+    And dconf was never asked to "write"
+    And dconf was never asked to "reset"
+
+  @stub.agents.devmenu.unlisted
+  Scenario: An Ask Bluefin slot missing from command-order reads off and showing it lists the slot
+    Given ChairLift is running
+    When I open the "Agents" page
+    Then the switch in the "Show Ask Bluefin in menu" row is off
+    When I toggle the switch in the "Show Ask Bluefin in menu" row
+    Then the application log contains "[DRY-RUN] would set Custom Command Menu command-order to [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]"
+    And the switch in the "Show Ask Bluefin in menu" row is off
     And dconf was never asked to "write"
     And dconf was never asked to "reset"

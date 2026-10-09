@@ -1,6 +1,7 @@
 package views
 
 import (
+	"errors"
 	"fmt"
 	"log"
 
@@ -50,8 +51,8 @@ func (uh *UserHome) buildApplicationsPage() {
 
 		// Package-list export row
 		dumpRow := adw.NewActionRow()
-		dumpRow.SetTitle("Export app list")
-		dumpRow.SetSubtitle("Save a list of your apps and tools to reinstall them later.")
+		dumpRow.SetTitle("Export package list")
+		dumpRow.SetSubtitle(pageview.PackageListExportSubtitle)
 		dumpSpinner := newActivitySpinner()
 		dumpRow.AddSuffix(&dumpSpinner.Widget)
 
@@ -88,6 +89,8 @@ func (uh *UserHome) buildApplicationsPage() {
 // loadBrewBundles discovers configured collections off the GTK thread and
 // builds their rows on the main thread. ConnectBundleInstall owns the shared
 // callback and per-collection action gate; setup navigates these same widgets.
+// Once the rows exist, refreshBundleStatuses observes which collections the
+// system already holds.
 func (uh *UserHome) loadBrewBundles(paths []string) {
 	bundles, discoveryErr := homebrew.AvailableBundles(paths)
 	warning := ""
@@ -116,6 +119,7 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 			uh.ConnectBundleInstall(bundle, installBtn, progress)
 			uh.brewBundlesGroup.Add(&row.Widget)
 		}
+		uh.refreshBundleStatuses()
 	})
 }
 
@@ -141,6 +145,16 @@ func newBundleRow(bundle homebrew.Bundle) (*adw.ActionRow, *gtk.Button, *gtk.Pro
 	controls.Append(&progress.Widget)
 	row.AddSuffix(&controls.Widget)
 	return row, installBtn, progress
+}
+
+// homebrewInventoryChanged re-reads what a Homebrew install anywhere in
+// ChairLift can change on the Apps page: the installed lists and which
+// collections the system already holds. It must be called on the GTK main
+// thread and is safe when either Apps group is disabled, because both
+// readers guard their own widgets.
+func (uh *UserHome) homebrewInventoryChanged() {
+	go uh.loadHomebrewPackages()
+	uh.refreshBundleStatuses()
 }
 
 // loadHomebrewPackages loads installed Homebrew packages asynchronously
@@ -173,6 +187,13 @@ func (uh *UserHome) loadHomebrewPackages() {
 				if !uh.brewPackagesRefresh.IsCurrent(generation) {
 					return
 				}
+				// A running row action owns its row's controls; replacing
+				// them now would hide its progress and admit a second
+				// start. settleHomebrewRows reloads once it finishes.
+				if uh.formulaGates.Defer() {
+					return
+				}
+				uh.formulaGates.Rebuild()
 				uh.formulaeRows.Clear(func(row *adw.ActionRow) {
 					uh.installedFormulae.Remove(&row.Widget)
 				})
@@ -191,16 +212,18 @@ func (uh *UserHome) loadHomebrewPackages() {
 						pinLabel = "Unpin"
 						pinTooltip = "Allow updates again"
 					}
-					pinBtn := gtk.NewButtonWithLabel(pinLabel)
+					pinBtn := gtk.NewButton()
+					setPackageButtonLabel(pinBtn, pinLabel, pkg.Name)
 					pinBtn.SetValign(gtk.AlignCenterValue)
 					pinBtn.SetTooltipText(pinTooltip)
 
-					uninstallBtn := gtk.NewButtonWithLabel("Uninstall")
+					uninstallBtn := gtk.NewButton()
+					setPackageButtonLabel(uninstallBtn, "Uninstall", pkg.Name)
 					uninstallBtn.SetValign(gtk.AlignCenterValue)
 					uninstallBtn.AddCssClass("destructive-action")
 					uninstallBtn.SetTooltipText("Remove this tool")
 
-					gate := &actionstate.Gate{}
+					gate := uh.formulaGates.New()
 					controls := []*gtk.Button{pinBtn, uninstallBtn}
 					uh.formulaButtons.connect(pinBtn, func(gtk.Button) {
 						if !gate.TryStart() {
@@ -240,6 +263,10 @@ func (uh *UserHome) loadHomebrewPackages() {
 				if !uh.brewPackagesRefresh.IsCurrent(generation) {
 					return
 				}
+				if uh.caskGates.Defer() {
+					return
+				}
+				uh.caskGates.Rebuild()
 				uh.caskRows.Clear(func(row *adw.ActionRow) {
 					uh.installedCasks.Remove(&row.Widget)
 				})
@@ -261,12 +288,13 @@ func (uh *UserHome) loadHomebrewPackages() {
 						continue
 					}
 
-					uninstallBtn := gtk.NewButtonWithLabel("Uninstall")
+					uninstallBtn := gtk.NewButton()
+					setPackageButtonLabel(uninstallBtn, "Uninstall", pkg.Name)
 					uninstallBtn.SetValign(gtk.AlignCenterValue)
 					uninstallBtn.AddCssClass("destructive-action")
 					uninstallBtn.SetTooltipText("Remove this app")
 
-					gate := &actionstate.Gate{}
+					gate := uh.caskGates.New()
 					controls := []*gtk.Button{uninstallBtn}
 					uh.caskButtons.connect(uninstallBtn, func(gtk.Button) {
 						if !gate.TryStart() {
@@ -306,10 +334,11 @@ func (uh *UserHome) confirmHomebrewPin(
 	uh.confirmations.connect(dialog, func(response string) {
 		if response != "confirm" {
 			gate.Reset()
+			uh.settleHomebrewRows(false)
 			return
 		}
 		setHomebrewControlsSensitive(controls, false)
-		primary.SetLabel(action + "ning…")
+		setPackageButtonLabel(primary, action+"ning…", name)
 		go uh.runHomebrewPin(name, pin, primary, controls, gate)
 	})
 	dialog.Present(&uh.applicationsPrefsPage.Widget)
@@ -340,6 +369,7 @@ func (uh *UserHome) runHomebrewPin(
 		errorMessage = fmt.Sprintf("Couldn't pin %s. Try again.", name)
 	}
 	uh.finishHomebrewPackageMutation(
+		name,
 		decision,
 		err,
 		errorMessage,
@@ -370,10 +400,11 @@ func (uh *UserHome) confirmHomebrewUninstall(
 	uh.confirmations.connect(dialog, func(response string) {
 		if response != "uninstall" {
 			gate.Reset()
+			uh.settleHomebrewRows(false)
 			return
 		}
 		setHomebrewControlsSensitive(controls, false)
-		primary.SetLabel("Uninstalling…")
+		setPackageButtonLabel(primary, "Uninstalling…", name)
 		go uh.runHomebrewUninstall(name, kind, primary, controls, gate)
 	})
 	dialog.Present(&uh.applicationsPrefsPage.Widget)
@@ -389,10 +420,16 @@ func (uh *UserHome) runHomebrewUninstall(
 	err := homebrew.Uninstall(name, kind == homebrew.Cask)
 	dryRun := dryrun.Enabled()
 	decision := actionstate.PackageUninstall(err == nil, dryRun)
+	var dependents []string
+	var depErr *homebrew.DependentsError
+	if errors.As(err, &depErr) {
+		dependents = depErr.Dependents
+	}
 	uh.finishHomebrewPackageMutation(
+		name,
 		decision,
 		err,
-		fmt.Sprintf("Couldn't uninstall %s. Try again.", name),
+		actionmsg.UninstallFailure(name, dependents),
 		actionmsg.Uninstall(dryRun, name),
 		"Uninstall",
 		"Uninstalled",
@@ -400,9 +437,15 @@ func (uh *UserHome) runHomebrewUninstall(
 		controls,
 		gate,
 	)
+	if err == nil && decision.Refresh {
+		// A collection holding the removed package is no longer fully
+		// installed; re-observe so its row offers Install again.
+		sgtk.RunOnMainThread(uh.refreshBundleStatuses)
+	}
 }
 
 func (uh *UserHome) finishHomebrewPackageMutation(
+	name string,
 	decision actionstate.Decision,
 	err error,
 	errorMessage string,
@@ -414,9 +457,10 @@ func (uh *UserHome) finishHomebrewPackageMutation(
 	gate *actionstate.Gate,
 ) {
 	sgtk.RunOnMainThread(func() {
+		refresh := false
 		if decision.RestoreControl {
 			gate.Reset()
-			primary.SetLabel(idleLabel)
+			setPackageButtonLabel(primary, idleLabel, name)
 			setHomebrewControlsSensitive(controls, true)
 		}
 		if err != nil {
@@ -424,18 +468,41 @@ func (uh *UserHome) finishHomebrewPackageMutation(
 			// failing recipe; that belongs in the log, not in a toast.
 			log.Printf("Homebrew package action failed: %v", err)
 			uh.toastAdder.ShowErrorToast(errorMessage)
-			return
+		} else {
+			if decision.CompleteControl {
+				gate.Complete()
+				setPackageButtonLabel(primary, completeLabel, name)
+				setHomebrewControlsSensitive(controls, false)
+			}
+			uh.toastAdder.ShowToast(toast)
+			refresh = decision.Refresh
 		}
-		if decision.CompleteControl {
-			gate.Complete()
-			primary.SetLabel(completeLabel)
-			setHomebrewControlsSensitive(controls, false)
-		}
-		uh.toastAdder.ShowToast(toast)
-		if decision.Refresh {
-			go uh.loadHomebrewPackages()
-		}
+		uh.settleHomebrewRows(refresh)
 	})
+}
+
+// setPackageButtonLabel sets a package row button's visible label and names
+// it after the package for assistive technology: every row shows the same
+// words, so the label alone announced "Uninstall" for every package.
+// GtkButton names itself from its label child through a LABELLED_BY
+// relation, which outranks the LABEL property, so the relation is dropped
+// after every label change.
+func setPackageButtonLabel(button *gtk.Button, label, name string) {
+	button.SetLabel(label)
+	button.ResetRelation(gtk.AccessibleRelationLabelledByValue)
+	SetAccessibleLabel(button, pageview.HomebrewPackageButtonName(label, name))
+}
+
+// settleHomebrewRows runs on the GTK main thread once a row action has
+// released its gate. It starts one inventory load when the action asked for
+// one or when a list rebuild was deferred while the action ran, so the
+// deferral never leaves the lists stale.
+func (uh *UserHome) settleHomebrewRows(refresh bool) {
+	formulaeOwed := uh.formulaGates.Settled()
+	casksOwed := uh.caskGates.Settled()
+	if refresh || formulaeOwed || casksOwed {
+		go uh.loadHomebrewPackages()
+	}
 }
 
 func setHomebrewControlsSensitive(controls []*gtk.Button, sensitive bool) {
