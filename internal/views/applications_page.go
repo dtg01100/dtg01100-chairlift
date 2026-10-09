@@ -115,7 +115,19 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 		}
 
 		for _, bundle := range bundles {
-			row, installBtn, progress := newBundleRow(bundle)
+			items, itemsErr := homebrew.BundleContents(bundle.Path)
+			total := bundle.ItemCount
+			if itemsErr != nil {
+				// The Brewfile moved or became unreadable between discovery
+				// and listing: fall back to an empty list. Pass zero as the
+				// total so the presenter reports "no recognised entries"
+				// rather than blaming the parse cap; the discovery path
+				// already logged the underlying problem.
+				log.Printf("Could not list contents of app collection %q: %v", bundle.Name, itemsErr)
+				items = nil
+				total = 0
+			}
+			row, installBtn, progress := newBundleRow(bundle, items, total)
 			uh.ConnectBundleInstall(bundle, installBtn, progress)
 			uh.brewBundlesGroup.Add(&row.Widget)
 		}
@@ -124,13 +136,18 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 }
 
 // newBundleRow builds one collection row with its Install button, unwired:
-// the caller connects the button through ConnectBundleInstall.
-func newBundleRow(bundle homebrew.Bundle) (*adw.ActionRow, *gtk.Button, *gtk.ProgressBar) {
+// the caller connects the button through ConnectBundleInstall. The row is
+// an AdwExpanderRow so the user can reveal the list of packages the
+// collection will install; the Install button lives as a suffix of the
+// expander itself, so it stays in view while the list is collapsed. The
+// description and the count go on the expander's own subtitle because a
+// person scanning the closed row needs both before deciding to expand.
+func newBundleRow(bundle homebrew.Bundle, items []homebrew.BundleItem, total int) (*adw.ExpanderRow, *gtk.Button, *gtk.ProgressBar) {
 	collection := bundleview.Describe(bundle.Name, bundle.Description, bundle.ItemCount)
-	row := adw.NewActionRow()
+	row := adw.NewExpanderRow()
 	row.SetTitle(collection.Title)
-	row.SetUseMarkup(false)
 	row.SetSubtitle(collection.Subtitle)
+	row.SetTitleLines(1)
 
 	// ConnectBundleInstall gives the button its label-and-spinner child. A
 	// button built with a label and then given another child publishes an
@@ -144,7 +161,46 @@ func newBundleRow(bundle homebrew.Bundle) (*adw.ActionRow, *gtk.Button, *gtk.Pro
 	controls.Append(&installBtn.Widget)
 	controls.Append(&progress.Widget)
 	row.AddSuffix(&controls.Widget)
+
+	addContentsRows(row, items, total)
 	return row, installBtn, progress
+}
+
+// addContentsRows fills the expander with one row per package the
+// collection would install. The expander is open by default, so a person
+// looking at the closed row already has the Install button next to the
+// description; expanding the row reveals the names beneath. A row whose
+// parser returned nothing renders the empty placeholder so the expanded
+// view still has something to read. total is the Brewfile's own entry
+// count, which can exceed the items slice when the parser hit its own
+// cap; passing it lets the presenter show an honest "showing N of M"
+// notice instead of pretending the truncated tail is the whole file.
+func addContentsRows(expander *adw.ExpanderRow, items []homebrew.BundleItem, total int) {
+	presentation := bundleview.PresentContents(items, total)
+	if !presentation.HasRows() {
+		placeholder := adw.NewActionRow()
+		placeholder.SetTitle(presentation.EmptyTitle)
+		if presentation.EmptySubtitle != "" {
+			placeholder.SetSubtitle(presentation.EmptySubtitle)
+		}
+		expander.AddRow(&placeholder.Widget)
+		return
+	}
+	for _, item := range presentation.Rows {
+		entry := adw.NewActionRow()
+		entry.SetTitle(item.Name)
+		if item.KindLabel != "" {
+			entry.SetSubtitle(item.KindLabel)
+		}
+		SetAccessibleLabel(entry, item.AccessibleName)
+		expander.AddRow(&entry.Widget)
+	}
+	if presentation.OverflowNotice != "" {
+		overflow := adw.NewActionRow()
+		overflow.SetTitle(presentation.OverflowNotice)
+		overflow.SetSubtitleLines(1)
+		expander.AddRow(&overflow.Widget)
+	}
 }
 
 // homebrewInventoryChanged re-reads what a Homebrew install anywhere in

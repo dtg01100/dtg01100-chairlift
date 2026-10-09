@@ -2,6 +2,7 @@ package homebrew
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -139,6 +140,103 @@ func TestBundleInstallHonorsDryRun(t *testing.T) {
 
 	if err := BundleInstall("/definitely/not/a/real/Brewfile"); err != nil {
 		t.Fatalf("BundleInstall() dry-run error = %v, want nil without invoking brew", err)
+	}
+}
+
+func TestBundleContentsReadsRecognisedEntriesInSourceOrder(t *testing.T) {
+	dir := t.TempDir()
+	path := writeBundleFile(t, dir, "team.Brewfile", "# tools our team relies on every day\n"+
+		"tap \"homebrew/cask\"\n"+
+		`brew "jq"`+"\n"+
+		`brew "ripgrep", link: true`+"\n"+
+		`cask "visual-studio-code"`+"\n"+
+		`cask "firefox"`+"\n"+
+		`flatpak "org.gnome.TextEditor"`+"\n"+
+		`mas "Xcode", id: 497799835`+"\n"+
+		`vscode "golang.go"`+"\n"+
+		// `brew "jq"` re-listed is the same (Kind, Name) and dedupes.
+		`brew "jq"`+"\n"+
+		// A malformed entry (no quotes) is skipped without failing the scan.
+		"brew unquoted\n"+
+		// A `tap` is a directive without an installable, by policy it does
+		// not appear as an item.
+		`tap "extra/extra"`+"\n")
+
+	items, err := BundleContents(path)
+	if err != nil {
+		t.Fatalf("BundleContents() error = %v, want nil", err)
+	}
+
+	want := []BundleItem{
+		{Name: "jq", Kind: BundleItemBrew},
+		{Name: "ripgrep", Kind: BundleItemBrew},
+		{Name: "visual-studio-code", Kind: BundleItemCask},
+		{Name: "firefox", Kind: BundleItemCask},
+		{Name: "org.gnome.TextEditor", Kind: BundleItemFlatpak},
+		{Name: "Xcode", Kind: BundleItemMas},
+		{Name: "golang.go", Kind: BundleItemVSCode},
+	}
+	if !reflect.DeepEqual(items, want) {
+		t.Fatalf("BundleContents() = %#v, want %#v", items, want)
+	}
+}
+
+func TestBundleContentsAcceptsSingleQuotesAndSkipsComments(t *testing.T) {
+	dir := t.TempDir()
+	path := writeBundleFile(t, dir, "single.Brewfile", "# A collection\n"+
+		"# with two lines of comment.\n"+
+		`brew 'bat'`+"\n"+
+		"\n"+
+		`cask 'font-fira-code'`+"\n")
+
+	items, err := BundleContents(path)
+	if err != nil {
+		t.Fatalf("BundleContents() error = %v, want nil", err)
+	}
+	want := []BundleItem{
+		{Name: "bat", Kind: BundleItemBrew},
+		{Name: "font-fira-code", Kind: BundleItemCask},
+	}
+	if !reflect.DeepEqual(items, want) {
+		t.Fatalf("BundleContents() = %#v, want %#v", items, want)
+	}
+}
+
+func TestBundleContentsEmptyBrewfileIsNoError(t *testing.T) {
+	dir := t.TempDir()
+	path := writeBundleFile(t, dir, "empty.Brewfile", "# only a comment block\n")
+
+	items, err := BundleContents(path)
+	if err != nil {
+		t.Fatalf("BundleContents() error = %v, want nil", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("BundleContents() = %#v, want no items", items)
+	}
+}
+
+func TestBundleContentsCapsRunawayFiles(t *testing.T) {
+	dir := t.TempDir()
+	var builder strings.Builder
+	builder.WriteString("# larger than the cap\n")
+	for i := range AvailableItems + 5 {
+		fmt.Fprintf(&builder, "brew \"tool-%d\"\n", i)
+	}
+	path := writeBundleFile(t, dir, "many.Brewfile", builder.String())
+
+	items, err := BundleContents(path)
+	if err != nil {
+		t.Fatalf("BundleContents() error = %v, want nil", err)
+	}
+	if len(items) != AvailableItems {
+		t.Fatalf("BundleContents() length = %d, want %d", len(items), AvailableItems)
+	}
+}
+
+func TestBundleContentsMissingFileReturnsError(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.Brewfile")
+	if _, err := BundleContents(missing); err == nil {
+		t.Fatal("BundleContents() error = nil, want open failure")
 	}
 }
 
