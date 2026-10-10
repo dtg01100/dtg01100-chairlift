@@ -386,7 +386,6 @@ func TestExecutablePrefersPathThenBrewSibling(t *testing.T) {
 	}
 }
 
-// The Models and Chat row opens llmman's own web UI on the loopback address
 // WebUIURL is the loopback daemon's models page; ChairLift links there
 // rather than re-implementing a picker (#568).
 func TestWebUIURLIsTheLoopbackDaemon(t *testing.T) {

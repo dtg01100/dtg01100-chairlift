@@ -26,7 +26,9 @@ from stubs import fake_executable, stub
 
 NODE_HOST = "127.0.0.1"
 NODE_PORT = 17434
-# 16 GiB: every family in aistack.OfflineCatalog has an eligible entry.
+# 16 GiB: the value reported on /llmman/node. ChairLift reads the figure
+# back via the ActiveModelAlias resolution path; no ChairLift-side offline
+# catalog narrows what counts as "eligible" any more (issue #568).
 NODE_MEMORY = 17179869184
 
 # Where the dogfooded Homebrew lives in the Dakota container and on GitHub's
@@ -37,9 +39,12 @@ NODE_MEMORY = 17179869184
 HOMEBREW_BIN_PARTS = ("/home/linuxbrew/", "/linuxbrew/.linuxbrew")
 
 # Nothing on this page may need the internet to render deterministically.
-# Model-family resolution tries huggingface.co before its offline catalog;
-# a refused proxy makes that fail at once. Go's ProxyFromEnvironment never
-# proxies loopback, so the node stub stays reachable.
+# The Agents page reads the ActiveModelAlias from llmman; if a developer's
+# shell had a corporate proxy, that proxy would also intercept llmman's
+# own model-catalog fetch and the page would not have a stable answer in
+# CI. Pointing every HTTP(S)_PROXY at a refused listener fails any
+# non-loopback request fast. Go's ProxyFromEnvironment never proxies
+# loopback, so the node stub stays reachable.
 BLACKHOLE_PROXY = "http://127.0.0.1:9"
 
 # What internal/troubleshoot.Detect resolves for the Goose row.
