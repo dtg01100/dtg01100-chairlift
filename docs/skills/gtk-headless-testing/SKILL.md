@@ -251,9 +251,8 @@ work there. Screenshots are one PipeWire frame from Mutter's ScreenCast API.
   picture, e.g. "No picture set") announces itself as "No picture set" — a
   name without its visible label (WCAG 2.5.3). Call
   `ResetRelation(gtk.AccessibleRelationLabelledByValue)` after
-  `SetActivatableWidget` unless the button's label is the row title (the
-  Developer Tools "Install" button is a row-title match and does not need
-  the reset), and have the scenario click the button by its visible label.
+  `SetActivatableWidget`, and have the scenario click the button by its
+  visible label.
 
 **Learned from:** #366/#375 (turning the probe on in CI) and #357's Wave 0,
 which replaced the one-probe-per-feature TSV harness — every community PR

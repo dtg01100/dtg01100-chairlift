@@ -26,9 +26,9 @@ from stubs import fake_executable, stub
 
 NODE_HOST = "127.0.0.1"
 NODE_PORT = 17434
-# 16 GiB: the value reported on /llmman/node. ChairLift reads the figure
-# back via the ActiveModelAlias resolution path; no ChairLift-side offline
-# catalog narrows what counts as "eligible" any more (issue #568).
+# 16 GiB: the memory figure the node stub reports on /llmman/node. Nothing
+# in ChairLift reads it since the model picker was removed (#568); it only
+# keeps the stub's response shaped like a real llmman node.
 NODE_MEMORY = 17179869184
 
 # Where the dogfooded Homebrew lives in the Dakota container and on GitHub's
@@ -38,13 +38,11 @@ NODE_MEMORY = 17179869184
 # scenario put in its own bin directory.
 HOMEBREW_BIN_PARTS = ("/home/linuxbrew/", "/linuxbrew/.linuxbrew")
 
-# Nothing on this page may need the internet to render deterministically.
-# The Agents page reads the ActiveModelAlias from llmman; if a developer's
-# shell had a corporate proxy, that proxy would also intercept llmman's
-# own model-catalog fetch and the page would not have a stable answer in
-# CI. Pointing every HTTP(S)_PROXY at a refused listener fails any
-# non-loopback request fast. Go's ProxyFromEnvironment never proxies
-# loopback, so the node stub stays reachable.
+# Defensive guard: the Agents page makes no non-loopback requests since the
+# model picker was removed (#568), but pointing every HTTP(S)_PROXY at a
+# refused listener makes any future one fail fast instead of depending on
+# the network. Go's ProxyFromEnvironment never proxies loopback, so the
+# node stub stays reachable.
 BLACKHOLE_PROXY = "http://127.0.0.1:9"
 
 # What internal/troubleshoot.Detect resolves for the Goose row.

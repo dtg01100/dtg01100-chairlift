@@ -77,10 +77,10 @@ func (uh *UserHome) buildAgentModeGroup(page *adw.PreferencesPage) {
 	manageBtn.ConnectClicked(&manageClicked)
 	manageRow.AddSuffix(&manageBtn.Widget)
 	manageRow.SetActivatableWidget(&manageBtn.Widget)
-	// AdwActionRow labels its activatable widget by the row title, which
-	// here matches the button label, but the row's subtitle carries the
-	// longer description. Reset the relation so the button is announced by
-	// its visible label rather than the row title's words alone.
+	// AdwActionRow labels its activatable widget by the row title. The
+	// title matches the button label today, so the reset changes nothing
+	// audible; it keeps the button named by its own visible label if the
+	// title and label ever diverge (WCAG 2.5.3).
 	manageBtn.ResetRelation(gtk.AccessibleRelationLabelledByValue)
 	manageRow.SetVisible(false)
 	uh.agentManageRow = manageRow
