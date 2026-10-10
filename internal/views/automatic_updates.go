@@ -119,6 +119,7 @@ func (uh *UserHome) onAutomaticUpdatesToggled(enabled bool, toggle *guardedSwitc
 		defer cancel()
 
 		err := ublue.SetAutomaticUpdates(ctx, enabled)
+		decision := actionmsg.AutomaticUpdates(dryrun.Enabled(), enabled)
 
 		sgtk.RunOnMainThread(func() {
 			toggle.widget.SetSensitive(true)
@@ -130,13 +131,19 @@ func (uh *UserHome) onAutomaticUpdatesToggled(enabled bool, toggle *guardedSwitc
 				return
 			}
 
-			decision := actionmsg.AutomaticUpdates(dryrun.Enabled(), enabled)
 			toggle.set(decision.Confirm == enabled)
 			if decision.Confirm {
 				row.SetSubtitle(pageview.AutomaticUpdatesResultSubtitle(enabled))
 			}
 			uh.toastAdder.ShowToast(decision.Toast)
 		})
+
+		// Only post-check when the helper actually ran: after a pkexec
+		// failure/cancel or a dry run the resume timer is untouched, so
+		// an "enabled" answer there is not helper skew.
+		if err != nil || !decision.Confirm {
+			return
+		}
 
 		// Post-check the resume-from-suspend timer (#558). The helper
 		// is supposed to mask it when the user turns automatic updates

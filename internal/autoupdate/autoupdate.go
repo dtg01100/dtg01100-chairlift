@@ -195,23 +195,10 @@ func classifyResume(isEnabled string) ResumeState {
 // resumeProbe is the injection seam for the unprivileged
 // `systemctl is-enabled ResumeTimerUnit` query DetectResume runs. The
 // production value runs the real query; tests substitute a function that
-// returns the canned is-enabled answer directly.
-var resumeProbe = systemctlResumeProbe
-
-// SetResumeProbe replaces the query DetectResume runs. The seam exists so
-// the post-action skew check can be exercised in unit tests without a
-// live systemd. Unlike SetProbe, no released or e2e binary wires a
-// replacement: the resume-timer post-check only runs after the user
-// turns automatic updates off, so the screenshot walkthrough does not
-// need to drive it, and the helper-skew warning only matters on a host
-// with the live timer. internal/installcheck's stub-surface rule does
-// not need updating because this seam has no environment variable.
-func SetResumeProbe(replacement func(context.Context) string) {
-	if replacement == nil {
-		return
-	}
-	resumeProbe = replacement
-}
+// returns the canned is-enabled answer directly. No released or e2e
+// binary replaces it, so it has no exported setter and no environment
+// variable for internal/installcheck's stub-surface rule to track.
+var resumeProbe = systemctlResumeOutput
 
 // DetectResume classifies the resume-from-suspend timer's state. It is
 // the post-action read that backs the helper-skew warning: after the
@@ -221,14 +208,10 @@ func DetectResume(ctx context.Context) ResumeState {
 	return classifyResume(resumeProbe(ctx))
 }
 
-// systemctlResumeProbe runs the unprivileged is-enabled query. As with
+// systemctlResumeOutput runs the unprivileged is-enabled query. As with
 // the main timer probe, exit status is ignored in favour of stdout
 // because systemctl exits non-zero for perfectly ordinary answers
 // ("disabled", "masked").
-func systemctlResumeProbe(ctx context.Context) string {
-	return systemctlResumeOutput(ctx)
-}
-
 func systemctlResumeOutput(ctx context.Context) string {
 	queryCtx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()

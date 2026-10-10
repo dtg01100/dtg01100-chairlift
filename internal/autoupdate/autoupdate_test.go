@@ -178,26 +178,3 @@ func TestDetectResumeUsesTheProbe(t *testing.T) {
 		t.Errorf("DetectResume() with enabled probe = %q, want %q", got, ResumeStateAvailable)
 	}
 }
-
-func TestSetResumeProbeIgnoresNil(t *testing.T) {
-	previous := resumeProbe
-	t.Cleanup(func() { resumeProbe = previous })
-	resumeProbe = func(context.Context) string { return "masked" }
-
-	SetResumeProbe(nil)
-	if got := DetectResume(context.Background()); got != ResumeStateMasked {
-		t.Errorf("DetectResume() after SetResumeProbe(nil) = %q, want %q", got, ResumeStateMasked)
-	}
-}
-
-func TestSetResumeProbeReplacesTheProbe(t *testing.T) {
-	previous := resumeProbe
-	t.Cleanup(func() { resumeProbe = previous })
-
-	replacement := func(context.Context) string { return "enabled" }
-	SetResumeProbe(replacement)
-
-	if got := DetectResume(context.Background()); got != ResumeStateAvailable {
-		t.Errorf("DetectResume() after replacement = %q, want %q", got, ResumeStateAvailable)
-	}
-}
