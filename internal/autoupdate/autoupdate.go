@@ -183,7 +183,7 @@ func (r ResumeState) String() string {
 // resume-timer work reports ResumeStateAvailable.
 func classifyResume(isEnabled string) ResumeState {
 	switch strings.TrimSpace(isEnabled) {
-	case "", "not-found":
+	case "", "not-found", "disabled":
 		return ResumeStateAbsent
 	case "masked", "masked-runtime":
 		return ResumeStateMasked

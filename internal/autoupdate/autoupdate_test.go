@@ -125,7 +125,7 @@ func TestClassifyResumeMapsEverySystemdState(t *testing.T) {
 		// uupd-resume.timer is still pending a stop.
 		{name: "enabled", isEnabled: "enabled", want: ResumeStateAvailable},
 		{name: "enabled at runtime", isEnabled: "enabled-runtime", want: ResumeStateAvailable},
-		{name: "disabled", isEnabled: "disabled", want: ResumeStateAvailable},
+		{name: "disabled", isEnabled: "disabled", want: ResumeStateAbsent},
 		{name: "static", isEnabled: "static", want: ResumeStateAvailable},
 		{name: "indirect", isEnabled: "indirect", want: ResumeStateAvailable},
 	}
