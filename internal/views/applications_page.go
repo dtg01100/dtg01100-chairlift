@@ -100,35 +100,48 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 	}
 	presentation := bundleview.Present(len(bundles), warning)
 
+	// Parse every Brewfile off the main thread before marshalling: the
+	// discovery path already runs off-thread, BundleContents is a buffered
+	// file scan, and the contract documented on the function above
+	// promises off-thread discovery + main-thread row construction only.
+	type parsed struct {
+		bundle homebrew.Bundle
+		items  []homebrew.BundleItem
+		total  int
+	}
+	parsedBundles := make([]parsed, 0, len(bundles))
+	for _, bundle := range bundles {
+		items, itemsErr := homebrew.BundleContents(bundle.Path)
+		if itemsErr != nil {
+			// The Brewfile moved or became unreadable between discovery
+			// and listing: fall back to an empty list. Pass zero as the
+			// total so the presenter reports "no recognised entries"
+			// rather than blaming the parse cap; the discovery path
+			// already logged the underlying problem.
+			log.Printf("Could not list contents of app collection %q: %v", bundle.Name, itemsErr)
+			items = nil
+		}
+		parsedBundles = append(parsedBundles, parsed{bundle: bundle, items: items, total: bundle.ItemCount})
+	}
+
 	sgtk.RunOnMainThread(func() {
 		if uh.brewBundlesGroup == nil {
 			return
 		}
 		uh.brewBundlesGroup.SetDescription(presentation.Description)
 
-		if len(bundles) == 0 {
+		if len(parsedBundles) == 0 {
 			row := adw.NewActionRow()
+			row.SetUseMarkup(false)
 			row.SetTitle(presentation.PlaceholderTitle)
 			row.SetSubtitle(presentation.PlaceholderSubtitle)
 			uh.brewBundlesGroup.Add(&row.Widget)
 			return
 		}
 
-		for _, bundle := range bundles {
-			items, itemsErr := homebrew.BundleContents(bundle.Path)
-			total := bundle.ItemCount
-			if itemsErr != nil {
-				// The Brewfile moved or became unreadable between discovery
-				// and listing: fall back to an empty list. Pass zero as the
-				// total so the presenter reports "no recognised entries"
-				// rather than blaming the parse cap; the discovery path
-				// already logged the underlying problem.
-				log.Printf("Could not list contents of app collection %q: %v", bundle.Name, itemsErr)
-				items = nil
-				total = 0
-			}
-			row, installBtn, progress := newBundleRow(bundle, items, total)
-			uh.ConnectBundleInstall(bundle, installBtn, progress)
+		for _, p := range parsedBundles {
+			row, installBtn, progress := newBundleRow(p.bundle, p.items, p.total)
+			uh.ConnectBundleInstall(p.bundle, installBtn, progress)
 			uh.brewBundlesGroup.Add(&row.Widget)
 		}
 		uh.refreshBundleStatuses()
@@ -145,6 +158,12 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 func newBundleRow(bundle homebrew.Bundle, items []homebrew.BundleItem, total int) (*adw.ExpanderRow, *gtk.Button, *gtk.ProgressBar) {
 	collection := bundleview.Describe(bundle.Name, bundle.Description, bundle.ItemCount)
 	row := adw.NewExpanderRow()
+	// Collection titles and descriptions may carry free-form text from a
+	// shipped Brewfile (comment lines, the humanize() fallback for unknown
+	// collections); AdwExpanderRow parses both as Pango markup by default,
+	// so a '&' or '<' would garble the row with a GTK warning (#437, the
+	// same shape as the bootc stage expander on the Updates page).
+	row.SetUseMarkup(false)
 	row.SetTitle(collection.Title)
 	row.SetSubtitle(collection.Subtitle)
 	row.SetTitleLines(1)
@@ -167,14 +186,15 @@ func newBundleRow(bundle homebrew.Bundle, items []homebrew.BundleItem, total int
 }
 
 // addContentsRows fills the expander with one row per package the
-// collection would install. The expander is open by default, so a person
-// looking at the closed row already has the Install button next to the
-// description; expanding the row reveals the names beneath. A row whose
-// parser returned nothing renders the empty placeholder so the expanded
-// view still has something to read. total is the Brewfile's own entry
-// count, which can exceed the items slice when the parser hit its own
-// cap; passing it lets the presenter show an honest "showing N of M"
-// notice instead of pretending the truncated tail is the whole file.
+// collection would install. The expander starts collapsed (AdwExpanderRow's
+// default); the Install button stays in view on the expander's suffix
+// whether or not the row is open, so a person who never expands the row
+// still has the affordance they had before. A row whose parser returned
+// nothing renders the empty placeholder so the expanded view still has
+// something to read. total is the Brewfile's own entry count, which can
+// exceed the items slice when the parser hit its own cap; passing it lets
+// the presenter show an honest "showing N of M" notice instead of
+// pretending the truncated tail is the whole file.
 func addContentsRows(expander *adw.ExpanderRow, items []homebrew.BundleItem, total int) {
 	presentation := bundleview.PresentContents(items, total)
 	if !presentation.HasRows() {
@@ -188,6 +208,10 @@ func addContentsRows(expander *adw.ExpanderRow, items []homebrew.BundleItem, tot
 	}
 	for _, item := range presentation.Rows {
 		entry := adw.NewActionRow()
+		// AdwActionRow parses title/subtitle as Pango markup by default;
+		// the Brewfile token may contain a free-form identifier or '&'/'<'
+		// that would otherwise render as a GTK warning (#437).
+		entry.SetUseMarkup(false)
 		entry.SetTitle(item.Name)
 		if item.KindLabel != "" {
 			entry.SetSubtitle(item.KindLabel)
@@ -197,8 +221,9 @@ func addContentsRows(expander *adw.ExpanderRow, items []homebrew.BundleItem, tot
 	}
 	if presentation.OverflowNotice != "" {
 		overflow := adw.NewActionRow()
+		overflow.SetUseMarkup(false)
 		overflow.SetTitle(presentation.OverflowNotice)
-		overflow.SetSubtitleLines(1)
+		overflow.SetTitleLines(1)
 		expander.AddRow(&overflow.Widget)
 	}
 }

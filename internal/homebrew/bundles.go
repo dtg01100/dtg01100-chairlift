@@ -344,16 +344,24 @@ func countBundleItems(path string) (int, error) {
 	}
 	defer func() { _ = file.Close() }()
 
-	count := 0
 	scanner := bufio.NewScanner(file)
+	seen := make(map[BundleItemKind]map[string]struct{})
+	count := 0
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		for _, prefix := range bundleEntryPrefixes {
-			if strings.HasPrefix(line, prefix) {
-				count++
-				break
-			}
+		kind, name, ok := parseBundleItemLine(scanner.Text())
+		if !ok {
+			continue
 		}
+		bucket := seen[kind]
+		if bucket == nil {
+			bucket = make(map[string]struct{})
+			seen[kind] = bucket
+		}
+		if _, dup := bucket[name]; dup {
+			continue
+		}
+		bucket[name] = struct{}{}
+		count++
 	}
 	return count, scanner.Err()
 }

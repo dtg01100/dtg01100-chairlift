@@ -309,19 +309,6 @@ func (g *InstallGate) InstallPhase() (label string, sensitive bool) {
 	}
 }
 
-// ContentsListTitle is the expander's title for a collection's package
-// list. Reading it without opening the row tells a person exactly what the
-// disclosure holds — apps and tools they could install — so the affordance
-// never reads as decoration. The title is collection-scoped: every row
-// shares it, so screen readers cannot tell one collection's list from
-// another's; that is what the per-row suffix `Items` names with
-// `ContentsRowName` below.
-const ContentsListTitle = "Show included apps and tools"
-
-// ContentsListSubtitle explains why opening the row is worth the click. It
-// stays short because the expander renders it on every closed row.
-const ContentsListSubtitle = "See what's in this collection before installing."
-
 // ContentsHiddenTitle is what the list rows call themselves when nothing
 // is left to show: it appears once a parse produced no recognised entries,
 // so the user knows the row is not a glitch and that the Install button is

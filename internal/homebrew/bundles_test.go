@@ -233,6 +233,38 @@ func TestBundleContentsCapsRunawayFiles(t *testing.T) {
 	}
 }
 
+// TestCountBundleItemsAgreesWithContents pins the invariant the Apps page
+// relies on: the ItemCount a Bundle carries matches what BundleContents
+// would return after dedup + malformed-line skipping. A file with a
+// duplicate brew, a cask, and an unquoted (skipped) line should count as
+// 2, not 3.
+func TestCountBundleItemsAgreesWithContents(t *testing.T) {
+	dir := t.TempDir()
+	path := writeBundleFile(t, dir, "mixed.Brewfile", strings.Join([]string{
+		`brew "jq"`,
+		`brew "jq"`, // dedupes to one entry
+		`cask "font-fira-code"`,
+		`brew unquoted`, // parseBundleItemLine rejects, must be skipped
+		`# trailing comment`,
+		``,
+	}, "\n"))
+
+	items, err := BundleContents(path)
+	if err != nil {
+		t.Fatalf("BundleContents() error = %v, want nil", err)
+	}
+	got, err := countBundleItems(path)
+	if err != nil {
+		t.Fatalf("countBundleItems() error = %v, want nil", err)
+	}
+	if got != len(items) {
+		t.Fatalf("countBundleItems() = %d, BundleContents length = %d", got, len(items))
+	}
+	if got != 2 {
+		t.Fatalf("countBundleItems() = %d, want 2 (jq deduped, font-fira-code kept, unquoted skipped)", got)
+	}
+}
+
 func TestBundleContentsMissingFileReturnsError(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.Brewfile")
 	if _, err := BundleContents(missing); err == nil {

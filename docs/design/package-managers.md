@@ -253,9 +253,10 @@ otherwise runs `brew update --auto-update` before every `bundle` subcommand.
 `BundleContents(path)` parses a Brewfile into `[]BundleItem` (one entry per
 recognised directive: `brew`, `cask`, `flatpak`, `mas`, `vscode`). Entries
 are returned in source order, deduplicated by (Kind, Name), and capped at
-256 items per file so a runaway Brewfile cannot dominate the UI. The same
-prefix table drives both `countBundleItems` (the row count) and the
-contents parser, so a Brewfile's count and its expanded list always agree.
+256 items per file so a runaway Brewfile cannot dominate the UI.
+`countBundleItems` runs the same `parseBundleItemLine` against the same
+input and applies the same dedup, so a Brewfile's count and its expanded
+list always agree (including when one entry repeats or is malformed).
 [`bundleview.PresentContents`](../../internal/views/bundleview/bundleview.go)
 turns those items into the rows the Apps page renders inside each
 collection's `AdwExpanderRow`, with a kind label (Command-line tool, App,
