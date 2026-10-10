@@ -753,8 +753,10 @@ Every mutation honors `dryrun.Enabled()`.
 within two seconds. `Resolve(Facts)` distinguishes unavailable, unconfigured,
 provisioning, ready, degraded and disabled. Unit presence or systemctl active
 alone is not readiness. Failed toggles re-observe state rather than invert an
-optimistic switch. Model/preset controls remain visible but insensitive until
-ready, with their unmet prerequisite explained.
+optimistic switch. The Active Model row stays visible but insensitive until
+ready, with its unmet prerequisite explained. Model selection itself happens
+in llmman's own models page (`http://127.0.0.1:17434/#/models`), which the
+Agents page's Manage Models row opens (#568).
 
 [`migration.go`](../../internal/aistack/migration.go) reconciles only an
 existing owned service. Matching file bytes alone do not prove that the daemon
