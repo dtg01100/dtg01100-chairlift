@@ -215,23 +215,22 @@ type BundleItem struct {
 // places keeps the row count honest.
 const AvailableItems = 256
 
+// bundleEntryPrefixes lists the installable Brewfile directives. The order
+// matches BundleItemKind, so the presenter's grouping reads in the same
+// sequence a reader meets in the file: formulae first, then graphical apps,
+// then non-Homebrew installables. Keeping the prefix list in one place
+// removes any way for the count, the presenter, and the parser to disagree
+// on what counts as an entry.
+var bundleEntryPrefixes = []string{"brew ", "cask ", "flatpak ", "mas ", "vscode "}
+
 // BundleContents parses a Brewfile and returns every installable entry it
 // recognises, in source order, deduplicated by (Kind, Name). A directive
 // without a recognisable token (a bare `tap "owner/repo"` or a malformed
 // line) is skipped silently; an entry outside the five installable kinds
 // is also skipped. The cap protects the parser and the UI from runaway
-// files; a Brewfile that exceeds it is truncated and the count it would
-// have returned is dropped along with the tail. Errors are reserved for
-// file-open failures, since a path that cannot be opened never had a
-// trustworthy count to begin with.
-//
-// The order in this table matches BundleItemKind, so the presenter's
-// grouping reads in the same sequence a reader meets in the file: formulae
-// first, then graphical apps, then non-Homebrew installables. Keeping the
-// prefix list in one place removes any way for the count, the presenter,
-// and the parser to disagree on what counts as an entry.
-var bundleEntryPrefixes = []string{"brew ", "cask ", "flatpak ", "mas ", "vscode "}
-
+// files; a Brewfile that exceeds it is truncated at AvailableItems entries.
+// An open failure returns no items; a read failure part-way through returns
+// the entries read so far alongside the error.
 func BundleContents(path string) ([]BundleItem, error) {
 	file, err := os.Open(path)
 	if err != nil {

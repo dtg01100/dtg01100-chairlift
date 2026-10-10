@@ -260,9 +260,11 @@ list always agree (including when one entry repeats or is malformed).
 [`bundleview.PresentContents`](../../internal/views/bundleview/bundleview.go)
 turns those items into the rows the Apps page renders inside each
 collection's `AdwExpanderRow`, with a kind label (Command-line tool, App,
-Flatpak, App Store, VS Code extension) per row and a placeholder for the
-two empty cases (a Brewfile with no recognised entries, a Brewfile that
-hit the parser cap). Tap directives are intentionally excluded because
+Flatpak, App Store, VS Code extension) per row. A Brewfile with no
+recognised entries shows a placeholder row instead; one longer than the
+256-entry cap lists the first 256 followed by a "Showing N of M entries."
+row. If the file cannot be read when the list is built, the rows read before
+the failure are kept with no overflow claim. Tap directives are intentionally excluded because
 they are not installable; a malformed entry (no quotes, or a quoted token
 that does not close on the same line) is skipped silently so one bad
 line cannot derail the rest of the list.

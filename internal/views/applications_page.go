@@ -114,14 +114,16 @@ func (uh *UserHome) loadBrewBundles(paths []string) {
 		items, itemsErr := homebrew.BundleContents(bundle.Path)
 		if itemsErr != nil {
 			// The Brewfile moved or became unreadable between discovery
-			// and listing: fall back to an empty list. Pass zero as the
-			// total so the presenter reports "no recognised entries"
-			// rather than blaming the parse cap; the discovery path
-			// already logged the underlying problem.
+			// and listing. Keep whatever was read before the failure and
+			// make the total match it, so the presenter neither claims a
+			// "Showing N of M" overflow nor blames the display limit.
 			log.Printf("Could not list contents of app collection %q: %v", bundle.Name, itemsErr)
-			items = nil
 		}
-		parsedBundles = append(parsedBundles, parsed{bundle: bundle, items: items, total: bundle.ItemCount})
+		total := bundle.ItemCount
+		if itemsErr != nil {
+			total = len(items)
+		}
+		parsedBundles = append(parsedBundles, parsed{bundle: bundle, items: items, total: total})
 	}
 
 	sgtk.RunOnMainThread(func() {
