@@ -275,7 +275,11 @@ so a check begun before an install cannot overwrite its outcome.
 `brew tap-info --installed --json` with on-disk installation receipts:
 `<prefix>/Cellar/<formula>/<version>/INSTALL_RECEIPT.json` and
 `<prefix>/Caskroom/<token>/.metadata/INSTALL_RECEIPT.json`, reading `source.tap`.
-Only untrusted taps with installed packages are actionable. A missing `trusted`
+Packages already trusted on their own are dropped using `brew trust --json=v1`
+(the only `brew trust` argv classified read-only), because per-package trust
+leaves the tap itself untrusted in `tap-info`; Homebrew without that flag lists
+every installed package. Only untrusted taps with installed, not yet trusted
+packages are actionable. A missing `trusted`
 field on older Homebrew is treated as trusted, not false.
 Every `tap-info` call runs with `HOMEBREW_NO_GITHUB_API=1`: its JSON also
 reports whether each tap is private, which brew asks the GitHub API, and on

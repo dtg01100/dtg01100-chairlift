@@ -176,6 +176,7 @@ func (uh *UserHome) loadUntrustedTaps() {
 				uh.confirmTrustTap(entry, trustBtn)
 			})
 			entry.expander.AddSuffix(&trustBtn.Widget)
+			entry.buttons = append(entry.buttons, trustBtn)
 
 			// One row per installed package, with its own "Trust" button.
 			// That is the per-program path issue #537 asks for: a tap with
@@ -185,12 +186,14 @@ func (uh *UserHome) loadUntrustedTaps() {
 			// the tap. Rows are keyed by kind as well as name: a tap may
 			// ship a formula and a cask under the same qualified name.
 			for _, formula := range tap.Formulae {
-				pkgRow := uh.buildUntrustedPackageRow(formula, homebrew.Formula, tap.Name)
+				pkgRow, pkgBtn := uh.buildUntrustedPackageRow(formula, homebrew.Formula, tap.Name)
+				entry.buttons = append(entry.buttons, pkgBtn)
 				entry.expander.AddRow(&pkgRow.Widget)
 				entry.packages[trustPackageKey{homebrew.Formula, formula}] = pkgRow
 			}
 			for _, cask := range tap.Casks {
-				pkgRow := uh.buildUntrustedPackageRow(cask, homebrew.Cask, tap.Name)
+				pkgRow, pkgBtn := uh.buildUntrustedPackageRow(cask, homebrew.Cask, tap.Name)
+				entry.buttons = append(entry.buttons, pkgBtn)
 				entry.expander.AddRow(&pkgRow.Widget)
 				entry.packages[trustPackageKey{homebrew.Cask, cask}] = pkgRow
 			}
@@ -218,13 +221,26 @@ type untrustedTapEntry struct {
 	tap      homebrew.UntrustedTap
 	expander *adw.ExpanderRow
 	packages map[trustPackageKey]*adw.ActionRow
+	// buttons are the Trust Tap and per-package buttons bound in
+	// uh.trustButtons, forgotten together when the expander is removed.
+	buttons []*gtk.Button
+}
+
+// removeTrustEntry drops a tap's expander from the group and forgets every
+// button bound inside it, not just the one that was clicked.
+func (uh *UserHome) removeTrustEntry(tapName string, entry *untrustedTapEntry) {
+	uh.brewTrustGroup.Remove(&entry.expander.Widget)
+	delete(uh.brewTrustTaps, tapName)
+	for _, b := range entry.buttons {
+		uh.trustButtons.forget(b)
+	}
 }
 
 // buildUntrustedPackageRow returns one ActionRow for an installed package
 // inside a tap's expander, with a "Trust" button wired to confirmTrustPackage.
 // The tap argument is the parent tap's name and is what the per-package
 // confirmation dialog names as the source the package comes from.
-func (uh *UserHome) buildUntrustedPackageRow(qualifiedName string, kind homebrew.PackageKind, tapName string) *adw.ActionRow {
+func (uh *UserHome) buildUntrustedPackageRow(qualifiedName string, kind homebrew.PackageKind, tapName string) (*adw.ActionRow, *gtk.Button) {
 	row := adw.NewActionRow()
 	presentation := pageview.UntrustedTapPackage(qualifiedName, kind)
 	row.SetTitle(presentation.Title)
@@ -236,7 +252,7 @@ func (uh *UserHome) buildUntrustedPackageRow(qualifiedName string, kind homebrew
 		uh.confirmTrustPackage(qualifiedName, kind, tapName, btn)
 	})
 	row.AddSuffix(&btn.Widget)
-	return row
+	return row, btn
 }
 
 // confirmTrustTap shows a confirmation dialog before trusting a source. The
@@ -282,9 +298,7 @@ func (uh *UserHome) trustTap(tap homebrew.UntrustedTap, button *gtk.Button) {
 		decision := actionmsg.TapTrust(dryrun.Enabled(), tap.Name)
 		if decision.MutateUI {
 			if entry, ok := uh.brewTrustTaps[tap.Name]; ok {
-				uh.brewTrustGroup.Remove(&entry.expander.Widget)
-				delete(uh.brewTrustTaps, tap.Name)
-				uh.trustButtons.forget(button)
+				uh.removeTrustEntry(tap.Name, entry)
 			}
 			if len(uh.brewTrustTaps) == 0 && uh.brewTrustError == nil {
 				uh.brewTrustGroup.SetVisible(false)
@@ -371,8 +385,7 @@ func (uh *UserHome) trustPackage(qualifiedName string, kind homebrew.PackageKind
 				if entry.tap.Count() == 0 {
 					// Nothing from the tap is left untrusted; drop the
 					// whole tap.
-					uh.brewTrustGroup.Remove(&entry.expander.Widget)
-					delete(uh.brewTrustTaps, tapName)
+					uh.removeTrustEntry(tapName, entry)
 				} else {
 					entry.expander.SetSubtitle(pageview.UntrustedTap(tapName, entry.tap.Formulae, entry.tap.Casks).Subtitle)
 				}
